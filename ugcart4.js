@@ -1162,14 +1162,14 @@ const LUCKY_CONFIGS = {
 
 
 
-    const DEBUG = true;
+    const DEBUG = false;
 // let __lucky_activityKey = null;
 // let __lucky_lastCtx = "";
 
 // =============================
 // LUCKY: activité (mobile+desktop) - stable & debuggable
 // =============================
-const LUCKY_DEBUG = true; // mets false quand c'est OK
+const LUCKY_DEBUG = false; // mets false quand c'est OK
 
 function luckyLog(...a){ if (LUCKY_DEBUG) console.log("[lucky]", ...a); }
 
