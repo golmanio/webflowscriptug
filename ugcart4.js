@@ -1176,77 +1176,13 @@ function isVisible(el){
   return r && r.width > 2 && r.height > 2;
 }
 
-function getGuidapRoot(){
-  return document.getElementById("guidap-popups")
-    || document.querySelector("guidap-booking-widget")
-    || document.body;
-}
-
-function norm(s){
-  return (s||"")
-    .toLowerCase()
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/[’']/g, "'")
-    .trim();
-}
-
-// ✅ lecture stable : nom du forfait sélectionné (marche en mobile)
-function getSelectedPackageText(){
-  const root = getGuidapRoot();
-
-  const sel =
-    root.querySelector(".package-field-item.selected .package-item-name-content") ||
-    root.querySelector(".package-field-item.selected .package-item-name") ||
-    root.querySelector(".package-field-item.selected") ||
-    null;
-
-  if (!sel) return "";
-  return norm(sel.innerText || sel.textContent || "");
-}
-
-// (optionnel) fallback : texte guidap global, sans filtre “visible”
-function getGuidapText(){
-  const root = getGuidapRoot();
-  return norm(root.innerText || root.textContent || "");
-}
-
-function detectLuckyActivity(){
-  // 1) ✅ le plus fiable
-  const pkg = getSelectedPackageText();
-
-  // 2) fallback guidap
-  const gtxt = getGuidapText();
-
-  // 3) fallback body (au cas où)
-  const btxt = norm(document.body?.innerText || "");
-
-  const txt = (pkg + " " + gtxt + " " + btxt).trim();
-
-  // Webflow tab (si dispo)
-  const activeTab =
-    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
-  const tab = norm(activeTab);
-
-  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant"))
-    return "enfants";
-
-  if (txt.includes("les tarifs classique") || tab.includes("classique"))
-    return "classique";
-
-  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf"))
-    return "evg";
-
-  if (txt.includes("escape game") || tab.includes("escape"))
-    return "escape";
-
-  return "default";
-}
 
 
 
-/*function getReservationContextText(){
+
+function getReservationContextText(){
   const selectors = [
+    ".g-group-field-label",
     ".reservation-recap",       
     ".reservation-recap-mobile",     
     ".cart-recap-bottom-container",  
@@ -1275,9 +1211,9 @@ function detectLuckyActivity(){
   }
 
   return "";
-}*/
+}
 	
-/*function detectLuckyActivity(){
+function detectLuckyActivity(){
   const ctx = getReservationContextText();
   const txt = ctx || norm(document.body?.innerText || ""); 
   const activeTab =
@@ -1306,7 +1242,7 @@ function detectLuckyActivity(){
   ) return "escape";
 
   return "default";
-}*/
+}
 
 
 
