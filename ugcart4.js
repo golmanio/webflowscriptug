@@ -22,46 +22,39 @@ const DEFAULT_PARTICIPANTS = 10;
 
 function deepQueryAll(selector, root = document) {
   const out = [];
-  const visited = new Set();
-
   const walk = (node) => {
-    if (!node || visited.has(node)) return;
-    visited.add(node);
+    if (!node) return;
 
-    // Document / ShadowRoot
-    if (node.nodeType === 9 || node.toString?.() === "[object ShadowRoot]") {
+    // Document
+    if (node.nodeType === 9) {
       out.push(...node.querySelectorAll(selector));
-      out.push(...node.querySelectorAll("*")); // pour pouvoir traverser
+      walk(node.documentElement);
       return;
     }
 
     // Element
     if (node.nodeType === 1) {
+      // query in light DOM
       out.push(...node.querySelectorAll(selector));
 
+      // traverse shadow DOM
       const sr = node.shadowRoot;
       if (sr) {
         out.push(...sr.querySelectorAll(selector));
+        // walk inside shadow root elements
         sr.querySelectorAll("*").forEach(walk);
       }
     }
   };
 
   walk(root);
+  // dedupe
   return Array.from(new Set(out));
-}
-
-function getGuidapRoot() {
-  return document.getElementById("guidap-popups") || document.querySelector("guidap-booking-widget") || document.body;
 }
 
 function deepFindButtonByText(label) {
   const target = norm(label);
-
-  // ✅ IMPORTANT: on scanne uniquement sous guidap-popups (pas toute la page)
-  const root = getGuidapRoot();
-
-  const buttons = deepQueryAll("button,[role='button'],a", root);
+  const buttons = deepQueryAll("button,[role='button'],a");
   return buttons.find(b => norm(b.textContent) === target && isVisible(b)) || null;
 }
 
