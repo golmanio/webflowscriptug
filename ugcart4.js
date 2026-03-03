@@ -1254,22 +1254,37 @@ function getGuidapRoot(){
 function detectLuckyActivity(){
   const root = getGuidapRoot();
 
-  // 1) On récupère un "texte activité" fiable (mobile + desktop)
-  const activityText = norm([
-    ...root.querySelectorAll(
-      ".g-group-field-label, .package-item-name-content, .package-item-name"
-    )
-  ].map(n => n.textContent || "").join(" "));
+  // 1) Le + fiable : l’item actuellement sélectionné
+  const selectedText = norm(
+    [
+      // cas courant Guidap
+      ...root.querySelectorAll(
+        ".g-item-box.selected .package-item-name-content," +
+        ".g-item-box.selected .package-item-name," +
+        ".package-field-item.selected .package-item-name-content," +
+        ".package-field-item.selected .package-item-name"
+      ),
+    ].map(n => n.textContent || "").join(" ")
+  );
 
-  // 2) On garde aussi un fallback global (au cas où)
+  // 2) Second signal (souvent présent sur steps 2/3 en mobile)
+  const stepLabelText = norm(
+    [...root.querySelectorAll(".g-group-field-label")]
+      .map(n => n.textContent || "")
+      .join(" ")
+  );
+
+  // 3) Fallback global
   const bodyTxt = norm(document.body?.innerText || "");
-  const txt = activityText + " " + bodyTxt;
 
-  // 3) Ton mapping
+  const txt = [selectedText, stepLabelText, bodyTxt].filter(Boolean).join(" ");
+
+  // (tab webflow si tu en as)
   const activeTab =
     document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
   const tab = norm(activeTab);
 
+  // mapping
   if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
   if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
   if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
@@ -1277,7 +1292,31 @@ function detectLuckyActivity(){
 
   return "default";
 }
+let __lucky_activityKey = null;
 
+function refreshLuckyActivity(reason=""){
+  const k = detectLuckyActivity();
+  if (k && k !== __lucky_activityKey) {
+    console.log("[lucky] activity changed:", __lucky_activityKey, "->", k, reason);
+    __lucky_activityKey = k;
+    window.__lucky_done = false;
+  }
+}
+
+// Observe guidap-popups (re-render mobile/desktop)
+(function(){
+  const root = getGuidapRoot();
+  const obs = new MutationObserver(() => refreshLuckyActivity("dom"));
+  obs.observe(root, { childList:true, subtree:true, attributes:true });
+  window.addEventListener("resize", () => refreshLuckyActivity("resize"), { passive:true });
+  setTimeout(() => refreshLuckyActivity("boot"), 300);
+})();
+
+
+function getLuckyConfig(){
+  const key = __lucky_activityKey || detectLuckyActivity();
+  return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
+}
 	
 /*function detectLuckyActivity(){
   const ctx = getReservationContextText();
@@ -1312,10 +1351,10 @@ function detectLuckyActivity(){
 
 
 
-function getLuckyConfig(){
+/*function getLuckyConfig(){
   const key = detectLuckyActivity();
   return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
-}	
+}*/	
 	
 	
 function getActivityFingerprint(){
