@@ -1,12 +1,13 @@
   (function () {
     const DEBUG = false;
 
-    const norm = (s) =>
-      (s || "")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .replace(/[’']/g, "'")
-        .trim();
+   function norm(s){
+	  return (s || "")
+		.toLowerCase()
+		.replace(/\s+/g, " ")
+		.replace(/[’']/g, "'")
+		.trim();
+	}
 
     const debounce = (fn, wait = 200) => {
       let t;
