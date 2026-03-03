@@ -1182,6 +1182,7 @@ function isVisible(el){
 
 function getReservationContextText(){
   const selectors = [
+    ".package-item-name-content",
     ".g-group-field-label",
     ".reservation-recap",       
     ".reservation-recap-mobile",     
