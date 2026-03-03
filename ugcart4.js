@@ -1154,8 +1154,8 @@ const LUCKY_CONFIGS = {
 
 
     const DEBUG = true;
-let __lucky_activityKey = null;
-let __lucky_lastCtx = "";
+// let __lucky_activityKey = null;
+// let __lucky_lastCtx = "";
 
 // =============================
 // LUCKY: activité (mobile+desktop) - stable & debuggable
