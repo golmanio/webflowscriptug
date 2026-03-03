@@ -1214,6 +1214,16 @@ function getGuidapRoot(){
     || document.querySelector("guidap-booking-widget")
     || document.body;
 }
+function isReallyVisible(el){
+  if(!el || !el.isConnected) return false;
+  const cs = getComputedStyle(el);
+  if(cs.display === "none" || cs.visibility === "hidden") return false;
+  if(Number(cs.opacity) === 0) return false;
+  if(el.hasAttribute("hidden")) return false;
+  if(el.getAttribute("aria-hidden") === "true") return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 2 && r.height > 2;
+}
 function getReservationContextText(){
   const root = getGuidapRoot();
   const selectors = [
