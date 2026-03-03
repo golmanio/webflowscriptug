@@ -1173,140 +1173,167 @@ const LUCKY_DEBUG = true; // mets false quand c'est OK
 
 function luckyLog(...a){ if (LUCKY_DEBUG) console.log("[lucky]", ...a); }
 
-// ──────────────────────────────────────────────
-// LUCKY: SPA-safe armer/désarmer (anti-spam)
-// ──────────────────────────────────────────────
-function collectTexts(root){ 
-const pick = (sel) => Array.from(root.querySelectorAll(sel)).map(n => (n.textContent || "").trim()); 
-// 1) item sélectionné (quand Guidap marque le choix)
-const selected = pick( ".g-item-box.selected .package-item-name-content," + ".g-item-box.selected .package-item-name," + ".package-field-item.selected .package-item-name-content," + ".package-field-item.selected .package-item-name," + "[aria-selected='true'] .package-item-name-content," + "[aria-selected='true'] .package-item-name" ); 
-// 2) fallback: tous les noms de packages visibles (utile step 1 mobile) 
-const names = pick(".package-item-name-content, .package-item-name"); 
-// 3) labels/headers de steps (souvent stable mobile) 
-const labels = pick(".g-group-field-label, .g-step-page-title, .g-step-page-subtitle"); 
-// 4) (optionnel) texte global Guidap (pas body entier, sinon bruit “anniversaire” etc) 
-const rootText = (root.innerText || root.textContent || "").slice(0, 1200); 
-return { selected: norm(selected.join(" ")), names: norm(names.join(" ")), labels: norm(labels.join(" ")), rootText: norm(rootText), }; }
-
-function getGuidapRootStrict(){
+function getGuidapRoot(){
   return document.getElementById("guidap-popups")
     || document.querySelector("guidap-booking-widget")
-    || null;
+    || null; // ✅ PAS de body
 }
 
-// throttle debug (évite spam même dans guidap)
-let __lucky_lastDbg = 0;
-function luckyDbg(obj){
-  if (!LUCKY_DEBUG) return;
-  const now = Date.now();
-  if (now - __lucky_lastDbg < 700) return;
-  __lucky_lastDbg = now;
-  console.log("[lucky][dbg]", obj);
+function collectTexts(root){
+  const pick = (sel) => Array.from(root.querySelectorAll(sel)).map(n => (n.textContent || "").trim());
+
+  // 1) item sélectionné (quand Guidap marque le choix)
+  const selected = pick(
+    ".g-item-box.selected .package-item-name-content," +
+    ".g-item-box.selected .package-item-name," +
+    ".package-field-item.selected .package-item-name-content," +
+    ".package-field-item.selected .package-item-name," +
+    "[aria-selected='true'] .package-item-name-content," +
+    "[aria-selected='true'] .package-item-name"
+  );
+
+  // 2) fallback: tous les noms de packages visibles (utile step 1 mobile)
+  const names = pick(".package-item-name-content, .package-item-name");
+
+  // 3) labels/headers de steps (souvent stable mobile)
+  const labels = pick(".g-group-field-label, .g-step-page-title, .g-step-page-subtitle");
+
+  // 4) (optionnel) texte global Guidap (pas body entier, sinon bruit “anniversaire” etc)
+  const rootText = (root.innerText || root.textContent || "").slice(0, 1200);
+
+  return {
+    selected: norm(selected.join(" ")),
+    names: norm(names.join(" ")),
+    labels: norm(labels.join(" ")),
+    rootText: norm(rootText),
+  };
 }
 
-let __lucky_mo = null;
-let __lucky_armedRoot = null;
-
-function disarmLucky(){
-  try { __lucky_mo && __lucky_mo.disconnect(); } catch {}
-  __lucky_mo = null;
-  __lucky_armedRoot = null;
-}
-
-function armLucky(){
-  const root = getGuidapRootStrict();
-  if (!root) { disarmLucky(); return; }
-
-  // déjà armé sur le bon root
-  if (__lucky_mo && __lucky_armedRoot === root) return;
-
-  // réarme
-  disarmLucky();
-  __lucky_armedRoot = root;
-
-  __lucky_mo = new MutationObserver(() => refreshLuckyActivity("mutation"));
-  __lucky_mo.observe(root, { childList:true, subtree:true, attributes:true, characterData:true });
-
-  // petit burst au moment où guidap arrive
-  refreshLuckyActivity("arm0");
-  setTimeout(() => refreshLuckyActivity("arm1"), 150);
-  setTimeout(() => refreshLuckyActivity("arm2"), 350);
-  setTimeout(() => refreshLuckyActivity("arm3"), 800);
-}
-
-// IMPORTANT : refresh ne fait RIEN hors guidap
-function refreshLuckyActivity(reason=""){
-  const root = getGuidapRootStrict();
-  if (!root) return;
-
+function detectLuckyActivity(){
+  const root = getGuidapRoot();
   const t = collectTexts(root);
 
+  // Important: on met selected en priorité, puis names/labels/rootText
   const txt = [t.selected, t.names, t.labels, t.rootText].filter(Boolean).join(" ");
+
+  // Tab Webflow si présent (desktop parfois)
   const activeTab = document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
   const tab = norm(activeTab);
 
-  let k = "default";
-  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) k = "enfants";
-  else if (txt.includes("les tarifs classique") || tab.includes("classique")) k = "classique";
-  else if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) k = "evg";
-  else if (txt.includes("escape game") || tab.includes("escape")) k = "escape";
+  // mapping (tu peux affiner)
+  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
+  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
+  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
 
-  luckyDbg({ k, reason, t });
+  return "default";
+}
 
-  // stabilisation anti-flip (2 confirmations)
+// --- anti-flip (stabilisation) ---
+// On n'applique un changement que si on voit le même key 2 fois d'affilée.
+let __lucky_activityKey = null;
+let __lucky_pendingKey = null;
+let __lucky_pendingCount = 0;
+
+function applyLuckyKey(newKey, reason){
+  if (!newKey) return;
+  if (newKey === __lucky_activityKey) return;
+
+  __lucky_activityKey = newKey;
+  window.__lucky_done = false;
+
+  luckyLog("activity changed =>", newKey, "| reason:", reason);
+
+  const ov = document.getElementById("luckyOverlay");
+  if (ov) {
+    const cfg = getLuckyConfig();
+    const titleEl = ov.querySelector("#luckyTitle");
+    if (titleEl) titleEl.textContent = cfg.title || "🎁 Tentez votre chance 😉";
+  }
+}
+
+function refreshLuckyActivity(reason=""){
+  const root = getGuidapRoot();
+  if (!root) return; // ✅ stop total si pas guidap
+
+  const k = detectLuckyActivity();
+
+  if (LUCKY_DEBUG) {
+    const t = collectTexts(root);
+    console.log("[lucky][dbg]", { k, reason, t });
+  }
+
   if (k !== __lucky_pendingKey) {
     __lucky_pendingKey = k;
     __lucky_pendingCount = 1;
     return;
   }
   __lucky_pendingCount++;
-  if (__lucky_pendingCount >= 2) applyLuckyKey(k, reason);
+
+  if (__lucky_pendingCount >= 2) {
+    applyLuckyKey(k, reason);
+  }
 }
 
-// Watcher global SPA : détecte apparition/disparition guidap (léger + throttlé)
-(function luckySPAWathcer(){
-  let lastHasGuidap = !!getGuidapRootStrict();
-  let scheduled = false;
+// Observe guidap-popups (mobile/desktop re-render)
+(function(){
+  let mo = null;
+  let armedRoot = null;
+  let scanTimer = null;
 
-  const scan = () => {
-    scheduled = false;
-    const hasGuidap = !!getGuidapRootStrict();
+  function disarm(){
+    try { mo && mo.disconnect(); } catch {}
+    mo = null;
+    armedRoot = null;
+  }
 
-    if (hasGuidap !== lastHasGuidap) {
-      lastHasGuidap = hasGuidap;
-      if (hasGuidap) armLucky();
-      else disarmLucky();
-    } else {
-      // si guidap présent, on s’assure d’être armé
-      if (hasGuidap) armLucky();
-    }
-  };
+  function arm(){
+    const root = getGuidapRoot();
+    if (!root) { disarm(); return; }
+    if (mo && armedRoot === root) return;
 
-  const scheduleScan = () => {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(scan, 200);
-  };
+    disarm();
+    armedRoot = root;
 
-  // Observe juste pour détecter les transitions SPA
-  const mo = new MutationObserver(scheduleScan);
-  mo.observe(document.documentElement, { childList:true, subtree:true });
+    mo = new MutationObserver(() => refreshLuckyActivity("mutation"));
+    mo.observe(root, { childList:true, subtree:true, attributes:true, characterData:true });
 
-  // hooks utiles en SPA
-  window.addEventListener("popstate", scheduleScan, { passive:true });
-  window.addEventListener("hashchange", scheduleScan, { passive:true });
+    // petit burst quand guidap apparaît
+    refreshLuckyActivity("arm0");
+    setTimeout(() => refreshLuckyActivity("arm1"), 150);
+    setTimeout(() => refreshLuckyActivity("arm2"), 350);
+    setTimeout(() => refreshLuckyActivity("arm3"), 800);
+  }
 
-  // (optionnel) patch history pour SPA qui utilise pushState/replaceState
+  // watcher global léger (détecte apparition/disparition guidap en SPA)
+  const global = new MutationObserver(() => {
+    if (scanTimer) return;
+    scanTimer = setTimeout(() => {
+      scanTimer = null;
+      arm();
+    }, 200);
+  });
+  global.observe(document.documentElement, { childList:true, subtree:true });
+
+  // resize uniquement si guidap présent
+  window.addEventListener("resize", () => {
+    if (getGuidapRoot()) refreshLuckyActivity("resize");
+  }, { passive:true });
+
+  // SPA hooks (optionnel mais utile)
+  window.addEventListener("popstate", arm, { passive:true });
+  window.addEventListener("hashchange", arm, { passive:true });
+
   if (!window.__luckyHistoryPatched) {
     window.__luckyHistoryPatched = true;
     const _ps = history.pushState;
     const _rs = history.replaceState;
-    history.pushState = function(...a){ const r=_ps.apply(this,a); scheduleScan(); return r; };
-    history.replaceState = function(...a){ const r=_rs.apply(this,a); scheduleScan(); return r; };
+    history.pushState = function(...a){ const r=_ps.apply(this,a); arm(); return r; };
+    history.replaceState = function(...a){ const r=_rs.apply(this,a); arm(); return r; };
   }
 
   // boot
-  if (lastHasGuidap) armLucky();
+  arm();
 })();
 
 function getLuckyConfig(){
