@@ -1248,43 +1248,48 @@ function getReservationContextText(){
 function getGuidapRoot(){
   return document.getElementById("guidap-popups")
     || document.querySelector("guidap-booking-widget")
-    || document.body;
+    || document;
 }
 
 function detectLuckyActivity(){
+  const norm = s => (s||"").toLowerCase().replace(/\s+/g," ").replace(/[’']/g,"'").trim();
   const root = getGuidapRoot();
 
-  // 1) Le + fiable : l’item actuellement sélectionné
+  // 1) Essaye "selected" (mobile peut être g-item_box)
   const selectedText = norm(
-    [
-      // cas courant Guidap
-      ...root.querySelectorAll(
-        ".g-item-box.selected .package-item-name-content," +
-        ".g-item-box.selected .package-item-name," +
-        ".package-field-item.selected .package-item-name-content," +
-        ".package-field-item.selected .package-item-name"
-      ),
-    ].map(n => n.textContent || "").join(" ")
+    Array.from(root.querySelectorAll([
+      ".g-item_box.selected .package-item-name-content",
+      ".g-item_box.selected .package-item-name",
+      ".g-item-box.selected .package-item-name-content",
+      ".g-item-box.selected .package-item-name",
+      "[aria-selected='true'] .package-item-name-content",
+      "[aria-selected='true'] .package-item-name",
+    ].join(",")))
+    .map(n => n.textContent || "")
+    .join(" ")
   );
 
-  // 2) Second signal (souvent présent sur steps 2/3 en mobile)
-  const stepLabelText = norm(
-    [...root.querySelectorAll(".g-group-field-label")]
-      .map(n => n.textContent || "")
-      .join(" ")
+  // 2) Fallback guidap (liste / labels) — toujours dans root
+  const rootText = norm(
+    Array.from(root.querySelectorAll([
+      ".package-item-name-content",
+      ".package-item-name",
+      ".g-group-field-label",
+      ".g-step-page-title",
+    ].join(",")))
+    .map(n => n.textContent || "")
+    .join(" ")
   );
 
-  // 3) Fallback global
-  const bodyTxt = norm(document.body?.innerText || "");
-
-  const txt = [selectedText, stepLabelText, bodyTxt].filter(Boolean).join(" ");
+  // 3) Si root est vide, alors seulement on regarde body
+  const bodyText = norm(document.body?.innerText || "");
+  const txt = (selectedText || rootText) ? (selectedText + " " + rootText) : bodyText;
 
   // (tab webflow si tu en as)
-  const activeTab =
-    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const activeTab = document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
   const tab = norm(activeTab);
 
-  // mapping
+  // mapping (garde ton ordre si tu veux)
   if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
   if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
   if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
