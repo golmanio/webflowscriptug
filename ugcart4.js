@@ -1,13 +1,17 @@
+// ===== GLOBAL HELPERS (shared across all IIFE) =====
+window.__ug_norm = window.__ug_norm || function (s) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[’']/g, "'")
+    .trim();
+};
+
+
   (function () {
     const DEBUG = false;
 
-   function norm(s){
-	  return (s || "")
-		.toLowerCase()
-		.replace(/\s+/g, " ")
-		.replace(/[’']/g, "'")
-		.trim();
-	}
+   const norm = window.__ug_norm;
 
     const debounce = (fn, wait = 200) => {
       let t;
@@ -700,7 +704,7 @@ document.addEventListener("click", (e) => {
 
 
 (function(){
-  function norm(s){ return (s||"").toLowerCase().replace(/\s+/g," ").trim(); }
+  const norm = window.__ug_norm;
   function isVisible(el){
     if(!el) return false;
     const cs = getComputedStyle(el);
@@ -795,7 +799,7 @@ function mount(){
 
 
 
-  function norm(s){ return (s||"").toLowerCase().replace(/\s+/g," ").trim(); }
+  const norm = window.__ug_norm;
   function isVisible(el){
     if(!el) return false;
     const cs = getComputedStyle(el);
@@ -924,7 +928,7 @@ function mount(){
 (function(){
   const NOTE_TEXT = "(1) Paiement au choix : acompte de 50 € ou totalité.";
 
-  function norm(s){ return (s||"").toLowerCase().replace(/\s+/g," ").trim(); }
+  const norm = window.__ug_norm;
   function isVisible(el){
     if(!el) return false;
     const cs = getComputedStyle(el);
@@ -2450,7 +2454,7 @@ document.addEventListener("click", async (e) => {
   const GOOGLE_REVIEWS = 344;
   const GOOGLE_URL = "https://maps.app.goo.gl/GqzHp8pXdzDmn9NW6";
 
-  function norm(s){ return (s||"").toLowerCase().replace(/\s+/g," ").trim(); }
+ const norm = window.__ug_norm;
   function isVisible(el){
     if(!el) return false;
     const cs = getComputedStyle(el);
@@ -2624,9 +2628,7 @@ document.addEventListener("click", async (e) => {
 
 
 (function(){
-  function norm(s){
-    return (s||"").toLowerCase().replace(/\u00a0/g," ").replace(/\s+/g," ").trim();
-  }
+const norm = window.__ug_norm;
 function conditionsOk(){
   const txt = norm(document.body?.innerText || "");
   const hasGivenNameInput = !!document.querySelector('input[name="given-name"][autocomplete="given-name"]');
@@ -2666,9 +2668,7 @@ function conditionsOk(){
 
 
 (function(){
-  function norm(s){
-    return (s||"").toLowerCase().replace(/\u00a0/g," ").replace(/\s+/g," ").trim();
-  }
+const norm = window.__ug_norm;
   function conditionsOk(){
     const txt = norm(document.body?.innerText || "");
     return txt.includes("valider le panier"); 
@@ -2707,9 +2707,7 @@ function conditionsOk(){
 
 
 (function(){
-  function norm(s){
-    return (s||"").toLowerCase().replace(/\u00a0/g," ").replace(/\s+/g," ").trim();
-  }
+const norm = window.__ug_norm;
   function conditionsOk(){
     const txt = norm(document.body?.innerText || "");
     return txt.includes("choisissez votre activité") && txt.includes("continuer");
