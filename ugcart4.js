@@ -1252,6 +1252,31 @@ function getReservationContextText(){
 	
 function detectLuckyActivity(){
   const ctx = getReservationContextText();
+  const bodyTxt = norm(document.body?.innerText || "");
+  const txt = (ctx ? (ctx + " ") : "") + bodyTxt; // ✅ FIX
+
+  const activeTab =
+    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const tab = norm(activeTab);
+
+  if (
+    txt.includes("les tarifs enfants") ||
+    txt.includes("anniversaire") ||
+    tab.includes("anniversaire") ||
+    tab.includes("enfant")
+  ) return "enfants";
+
+  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
+
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
+
+  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
+
+  return "default";
+}	
+	
+/*function detectLuckyActivity(){
+  const ctx = getReservationContextText();
   const txt = ctx || norm(document.body?.innerText || ""); 
   const activeTab =
     document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
@@ -1279,7 +1304,7 @@ function detectLuckyActivity(){
   ) return "escape";
 
   return "default";
-}
+}*/
 
 
 
