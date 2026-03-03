@@ -1287,12 +1287,12 @@ function getLuckyConfig(){
   return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
 }
 
-    const norm = (s) =>
-      (s || "")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .replace(/[’']/g, "'")
-        .trim();
+    // const norm = (s) =>
+      // (s || "")
+        // .toLowerCase()
+        // .replace(/\s+/g, " ")
+        // .replace(/[’']/g, "'")
+        // .trim();
 
     function log(...a){ if (DEBUG) console.log("[lucky]", ...a); }
 	
@@ -1372,10 +1372,10 @@ function detectLuckyActivity(){
 */
 
 
-function getLuckyConfig(){
-  const key = detectLuckyActivity();
-  return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
-}	
+// function getLuckyConfig(){
+  // const key = detectLuckyActivity();
+  // return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
+// }	
 	
 /*	
 function getActivityFingerprint(){
