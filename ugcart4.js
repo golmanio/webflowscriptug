@@ -1175,7 +1175,7 @@ function isVisible(el){
   const r = el.getBoundingClientRect?.();
   return r && r.width > 2 && r.height > 2;
 }
-function getReservationContextText(){
+/*function getReservationContextText(){
   const selectors = [
     ".reservation-recap",       
     ".reservation-recap-mobile",     
@@ -1205,9 +1205,42 @@ function getReservationContextText(){
   }
 
   return "";
-}
+}*/
 	
-/*function detectLuckyActivity(){
+	
+	
+function getGuidapRoot(){
+  return document.getElementById("guidap-popups")
+    || document.querySelector("guidap-booking-widget")
+    || document.body;
+}
+function getReservationContextText(){
+  const root = getGuidapRoot();
+  const selectors = [
+    ".reservation-recap",
+    ".reservation-recap-mobile",
+    ".activity-info-reservation",
+    ".cart-recap-bottom-container",
+    ".cart-recap-bottom",
+  ];
+
+  for (const sel of selectors){
+    const nodes = Array.from(root.querySelectorAll(sel)).filter(isReallyVisible);
+    for (const n of nodes){
+      const t = norm(n.innerText || "");
+      if (t.includes("votre réservation") || t.includes("total") || t.includes("nombre de participants")){
+        return t;
+      }
+    }
+  }
+
+  // fallback GUIDAP ONLY (pas body)
+  const any = Array.from(root.querySelectorAll("div,section,aside,article")).filter(isReallyVisible);
+  const recap = any.find(el => norm(el.innerText||"").includes("votre réservation"));
+  return recap ? norm(recap.innerText||"") : "";
+}	
+	
+function detectLuckyActivity(){
   const ctx = getReservationContextText();
   const txt = ctx || norm(document.body?.innerText || ""); 
   const activeTab =
@@ -1236,43 +1269,9 @@ function getReservationContextText(){
   ) return "escape";
 
   return "default";
-}*/
-
-function detectLuckyActivity(){
-  const ctx = getReservationContextText();
-  const body = norm(document.body?.innerText || "");
-
-  // On prend d'abord ctx, MAIS si ctx ne contient aucun mot-clé,
-  // on bascule sur body (qui lui contient souvent "Escape Game" sur mobile).
-  const ctxOk = (() => {
-    const t = ctx || "";
-    return /tarifs enfants|anniversaire|enfant|tarifs classique|classique|evg|evjf|escape game|escape/.test(t);
-  })();
-
-  const txt = ctxOk ? (ctx || "") : body;
-
-  const activeTab =
-    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
-  const tab = norm(activeTab);
-
-  if (
-    txt.includes("les tarifs enfants") ||
-    txt.includes("anniversaire") ||
-    tab.includes("anniversaire") ||
-    tab.includes("enfant")
-  ) return "enfants";
-
-  if (txt.includes("les tarifs classique") || tab.includes("classique"))
-    return "classique";
-
-  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf"))
-    return "evg";
-
-  if (txt.includes("escape game") || tab.includes("escape"))
-    return "escape";
-
-  return "default";
 }
+
+
 
 function getLuckyConfig(){
   const key = detectLuckyActivity();
