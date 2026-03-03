@@ -1071,6 +1071,10 @@ function mount(){
 
   
   (function () {
+	  const norm = window.__ug_norm;
+	  
+	  
+	  
 	  function newToken() {
 	  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 	}
