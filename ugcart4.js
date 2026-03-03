@@ -19,6 +19,51 @@ const MAX_PARTICIPANTS = 40;
 const LS_KEY = "unigames_participants";
 const DEFAULT_PARTICIPANTS = 10;
 
+
+function deepQueryAll(selector, root = document) {
+  const out = [];
+  const walk = (node) => {
+    if (!node) return;
+
+    // Document
+    if (node.nodeType === 9) {
+      out.push(...node.querySelectorAll(selector));
+      walk(node.documentElement);
+      return;
+    }
+
+    // Element
+    if (node.nodeType === 1) {
+      // query in light DOM
+      out.push(...node.querySelectorAll(selector));
+
+      // traverse shadow DOM
+      const sr = node.shadowRoot;
+      if (sr) {
+        out.push(...sr.querySelectorAll(selector));
+        // walk inside shadow root elements
+        sr.querySelectorAll("*").forEach(walk);
+      }
+    }
+  };
+
+  walk(root);
+  // dedupe
+  return Array.from(new Set(out));
+}
+
+function deepFindButtonByText(label) {
+  const target = norm(label);
+  const buttons = deepQueryAll("button,[role='button'],a");
+  return buttons.find(b => norm(b.textContent) === target && isVisible(b)) || null;
+}
+
+
+
+
+
+
+
 function clampN(n){
   n = parseInt(n, 10);
   if (!Number.isFinite(n)) n = DEFAULT_PARTICIPANTS;
@@ -443,7 +488,32 @@ function climbToRecapFromButton(btn) {
 
 function findRecapCard() {
   if (isRecapCard(stableRecap)) return stableRecap;
-  const cont = Array.from(document.querySelectorAll("button"))
+  
+  
+  
+ 
+  // ✅ deep search (shadow dom)
+  const cont = deepFindButtonByText("continuer");
+  if (cont) {
+    const card = climbToRecapFromButton(cont);
+    if (card) return (stableRecap = card);
+
+    // ✅ fallback: accepte BODY si on a bien un bouton continuer visible
+    stableRecap = document.body;
+    return stableRecap;
+  }
+
+  const val = deepFindButtonByText("valider le panier");
+  if (val) {
+    const card = climbToRecapFromButton(val);
+    if (card) return (stableRecap = card);
+    stableRecap = document.body;
+    return stableRecap;
+  }
+ 
+  
+  
+ /* const cont = Array.from(document.querySelectorAll("button"))
   .find(b => norm(b.textContent) === "continuer" && isGoodActionButton(b));
   if (cont) {
     const card = climbToRecapFromButton(cont);
@@ -454,7 +524,7 @@ const val = Array.from(document.querySelectorAll("button"))
   if (val) {
     const card = climbToRecapFromButton(val);
     if (card) return (stableRecap = card);
-  }
+  }*/
   const blocks = Array.from(document.querySelectorAll("div,section,article,aside"));
   const found = blocks.find(isRecapCard) || null;
   if (found) stableRecap = found;
@@ -718,6 +788,12 @@ function mount(){
 
 
 (function(){
+
+
+
+
+
+
   function norm(s){ return (s||"").toLowerCase().replace(/\s+/g," ").trim(); }
   function isVisible(el){
     if(!el) return false;
