@@ -1157,7 +1157,135 @@ const LUCKY_CONFIGS = {
 let __lucky_activityKey = null;
 let __lucky_lastCtx = "";
 
+// =============================
+// LUCKY: activité (mobile+desktop) - stable & debuggable
+// =============================
+const LUCKY_DEBUG = true; // mets false quand c'est OK
 
+function luckyLog(...a){ if (LUCKY_DEBUG) console.log("[lucky]", ...a); }
+
+function getGuidapRoot(){
+  return document.getElementById("guidap-popups")
+    || document.querySelector("guidap-booking-widget")
+    || document.body;
+}
+
+function collectTexts(root){
+  const pick = (sel) => Array.from(root.querySelectorAll(sel)).map(n => (n.textContent || "").trim());
+
+  // 1) item sélectionné (quand Guidap marque le choix)
+  const selected = pick(
+    ".g-item-box.selected .package-item-name-content," +
+    ".g-item-box.selected .package-item-name," +
+    ".package-field-item.selected .package-item-name-content," +
+    ".package-field-item.selected .package-item-name," +
+    "[aria-selected='true'] .package-item-name-content," +
+    "[aria-selected='true'] .package-item-name"
+  );
+
+  // 2) fallback: tous les noms de packages visibles (utile step 1 mobile)
+  const names = pick(".package-item-name-content, .package-item-name");
+
+  // 3) labels/headers de steps (souvent stable mobile)
+  const labels = pick(".g-group-field-label, .g-step-page-title, .g-step-page-subtitle");
+
+  // 4) (optionnel) texte global Guidap (pas body entier, sinon bruit “anniversaire” etc)
+  const rootText = (root.innerText || root.textContent || "").slice(0, 1200);
+
+  return {
+    selected: norm(selected.join(" ")),
+    names: norm(names.join(" ")),
+    labels: norm(labels.join(" ")),
+    rootText: norm(rootText),
+  };
+}
+
+function detectLuckyActivity(){
+  const root = getGuidapRoot();
+  const t = collectTexts(root);
+
+  // Important: on met selected en priorité, puis names/labels/rootText
+  const txt = [t.selected, t.names, t.labels, t.rootText].filter(Boolean).join(" ");
+
+  // Tab Webflow si présent (desktop parfois)
+  const activeTab = document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const tab = norm(activeTab);
+
+  // mapping (tu peux affiner)
+  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
+  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
+  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
+
+  return "default";
+}
+
+// --- anti-flip (stabilisation) ---
+// On n'applique un changement que si on voit le même key 2 fois d'affilée.
+let __lucky_activityKey = null;
+let __lucky_pendingKey = null;
+let __lucky_pendingCount = 0;
+
+function applyLuckyKey(newKey, reason){
+  if (!newKey) return;
+  if (newKey === __lucky_activityKey) return;
+
+  __lucky_activityKey = newKey;
+  window.__lucky_done = false;
+
+  luckyLog("activity changed =>", newKey, "| reason:", reason);
+
+  const ov = document.getElementById("luckyOverlay");
+  if (ov) {
+    const cfg = getLuckyConfig();
+    const titleEl = ov.querySelector("#luckyTitle");
+    if (titleEl) titleEl.textContent = cfg.title || "🎁 Tentez votre chance 😉";
+  }
+}
+
+function refreshLuckyActivity(reason=""){
+  const k = detectLuckyActivity();
+
+  if (LUCKY_DEBUG) {
+    const root = getGuidapRoot();
+    const t = collectTexts(root);
+    console.log("[lucky][dbg]", { k, reason, t });
+  }
+
+  // stabilisation
+  if (k !== __lucky_pendingKey) {
+    __lucky_pendingKey = k;
+    __lucky_pendingCount = 1;
+    return;
+  }
+  __lucky_pendingCount++;
+
+  if (__lucky_pendingCount >= 2) {
+    applyLuckyKey(k, reason);
+  }
+}
+
+// Observe guidap-popups (mobile/desktop re-render)
+(function(){
+  const root = getGuidapRoot();
+
+  const mo = new MutationObserver(() => refreshLuckyActivity("mutation"));
+  mo.observe(root, { childList:true, subtree:true, attributes:true, characterData:true });
+
+  // resize (passage desktop/mobile)
+  window.addEventListener("resize", () => refreshLuckyActivity("resize"), { passive:true });
+
+  // boot burst (au chargement, le DOM arrive en 2 temps)
+  refreshLuckyActivity("boot0");
+  setTimeout(() => refreshLuckyActivity("boot1"), 150);
+  setTimeout(() => refreshLuckyActivity("boot2"), 350);
+  setTimeout(() => refreshLuckyActivity("boot3"), 800);
+})();
+
+function getLuckyConfig(){
+  const key = __lucky_activityKey || detectLuckyActivity();
+  return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
+}
 
     const norm = (s) =>
       (s || "")
@@ -1177,41 +1305,7 @@ function isVisible(el){
 }
 
 
-function getGuidapRoot(){
-  return document.getElementById("guidap-popups")
-    || document.querySelector("guidap-booking-widget")
-    || document.body;
-}
-
-function detectLuckyActivity(){
-  const root = getGuidapRoot();
-
-  // 1) On récupère un "texte activité" fiable (mobile + desktop)
-  const activityText = norm([
-    ...root.querySelectorAll(
-      ".g-group-field-label, .package-item-name-content, .package-item-name"
-    )
-  ].map(n => n.textContent || "").join(" "));
-
-  // 2) On garde aussi un fallback global (au cas où)
-  const bodyTxt = norm(document.body?.innerText || "");
-  const txt = activityText + " " + bodyTxt;
-
-  // 3) Ton mapping
-  const activeTab =
-    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
-  const tab = norm(activeTab);
-
-  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
-  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
-  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
-  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
-
-  return "default";
-}
-
-
-function getReservationContextText(){
+/*function getReservationContextText(){
   const selectors = [
     ".package-item-name-content",
     ".g-group-field-label",
@@ -1244,86 +1338,8 @@ function getReservationContextText(){
 
   return "";
 }
-
-function getGuidapRoot(){
-  return document.getElementById("guidap-popups")
-    || document.querySelector("guidap-booking-widget")
-    || document;
-}
-
-function detectLuckyActivity(){
-  const norm = s => (s||"").toLowerCase().replace(/\s+/g," ").replace(/[’']/g,"'").trim();
-  const root = getGuidapRoot();
-
-  // 1) Essaye "selected" (mobile peut être g-item_box)
-  const selectedText = norm(
-    Array.from(root.querySelectorAll([
-      ".g-item_box.selected .package-item-name-content",
-      ".g-item_box.selected .package-item-name",
-      ".g-item-box.selected .package-item-name-content",
-      ".g-item-box.selected .package-item-name",
-      "[aria-selected='true'] .package-item-name-content",
-      "[aria-selected='true'] .package-item-name",
-    ].join(",")))
-    .map(n => n.textContent || "")
-    .join(" ")
-  );
-
-  // 2) Fallback guidap (liste / labels) — toujours dans root
-  const rootText = norm(
-    Array.from(root.querySelectorAll([
-      ".package-item-name-content",
-      ".package-item-name",
-      ".g-group-field-label",
-      ".g-step-page-title",
-    ].join(",")))
-    .map(n => n.textContent || "")
-    .join(" ")
-  );
-
-  // 3) Si root est vide, alors seulement on regarde body
-  const bodyText = norm(document.body?.innerText || "");
-  const txt = (selectedText || rootText) ? (selectedText + " " + rootText) : bodyText;
-
-  // (tab webflow si tu en as)
-  const activeTab = document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
-  const tab = norm(activeTab);
-
-  // mapping (garde ton ordre si tu veux)
-  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
-  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
-  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
-  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
-
-  return "default";
-}
-let __lucky_activityKey = null;
-
-function refreshLuckyActivity(reason=""){
-  const k = detectLuckyActivity();
-  if (k && k !== __lucky_activityKey) {
-    console.log("[lucky] activity changed:", __lucky_activityKey, "->", k, reason);
-    __lucky_activityKey = k;
-    window.__lucky_done = false;
-  }
-}
-
-// Observe guidap-popups (re-render mobile/desktop)
-(function(){
-  const root = getGuidapRoot();
-  const obs = new MutationObserver(() => refreshLuckyActivity("dom"));
-  obs.observe(root, { childList:true, subtree:true, attributes:true });
-  window.addEventListener("resize", () => refreshLuckyActivity("resize"), { passive:true });
-  setTimeout(() => refreshLuckyActivity("boot"), 300);
-})();
-
-
-function getLuckyConfig(){
-  const key = __lucky_activityKey || detectLuckyActivity();
-  return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
-}
 	
-/*function detectLuckyActivity(){
+function detectLuckyActivity(){
   const ctx = getReservationContextText();
   const txt = ctx || norm(document.body?.innerText || ""); 
   const activeTab =
@@ -1352,16 +1368,16 @@ function getLuckyConfig(){
   ) return "escape";
 
   return "default";
-}*/
+}
+*/
 
 
-
-/*function getLuckyConfig(){
+function getLuckyConfig(){
   const key = detectLuckyActivity();
   return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
-}*/	
+}	
 	
-	
+/*	
 function getActivityFingerprint(){
   const ctx = getReservationContextText();
   const key = detectLuckyActivity();
@@ -1393,10 +1409,11 @@ function maybeResetLuckyOnActivityChange(){
     }
   }
 }
+
 setInterval(() => {
   try { maybeResetLuckyOnActivityChange(); } catch(e){}
 }, 600);	
-	
+*/	
     function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 	function getByXPath(xpath, root = document) {
 	  try {
@@ -2085,9 +2102,12 @@ function lightenHex(hex, amt) {
     // ---- wheel spin
     async function spinWheelButAlwaysWin5() {	
       ensureWheelUI();
-	const cfg = getLuckyConfig();
-	const PROMO_CODE = cfg.promoCode;
-	__lucky_activityKey = detectLuckyActivity();
+		refreshLuckyActivity("before-spin");
+		const cfg = getLuckyConfig();
+		const PROMO_CODE = cfg.promoCode;	  
+	// const cfg = getLuckyConfig();
+	// const PROMO_CODE = cfg.promoCode;
+	// __lucky_activityKey = detectLuckyActivity();
 
       const canvas = document.getElementById("luckyCanvas");
       const ctx = canvas.getContext("2d");
