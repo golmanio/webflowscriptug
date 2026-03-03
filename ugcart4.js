@@ -1207,7 +1207,7 @@ function getReservationContextText(){
   return "";
 }
 	
-function detectLuckyActivity(){
+/*function detectLuckyActivity(){
   const ctx = getReservationContextText();
   const txt = ctx || norm(document.body?.innerText || ""); 
   const activeTab =
@@ -1234,6 +1234,42 @@ function detectLuckyActivity(){
     txt.includes("escape game") ||
     tab.includes("escape")
   ) return "escape";
+
+  return "default";
+}*/
+
+function detectLuckyActivity(){
+  const ctx = getReservationContextText();
+  const body = norm(document.body?.innerText || "");
+
+  // On prend d'abord ctx, MAIS si ctx ne contient aucun mot-clé,
+  // on bascule sur body (qui lui contient souvent "Escape Game" sur mobile).
+  const ctxOk = (() => {
+    const t = ctx || "";
+    return /tarifs enfants|anniversaire|enfant|tarifs classique|classique|evg|evjf|escape game|escape/.test(t);
+  })();
+
+  const txt = ctxOk ? (ctx || "") : body;
+
+  const activeTab =
+    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const tab = norm(activeTab);
+
+  if (
+    txt.includes("les tarifs enfants") ||
+    txt.includes("anniversaire") ||
+    tab.includes("anniversaire") ||
+    tab.includes("enfant")
+  ) return "enfants";
+
+  if (txt.includes("les tarifs classique") || tab.includes("classique"))
+    return "classique";
+
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf"))
+    return "evg";
+
+  if (txt.includes("escape game") || tab.includes("escape"))
+    return "escape";
 
   return "default";
 }
