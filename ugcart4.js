@@ -1177,7 +1177,38 @@ function isVisible(el){
 }
 
 
+function getGuidapRoot(){
+  return document.getElementById("guidap-popups")
+    || document.querySelector("guidap-booking-widget")
+    || document.body;
+}
 
+function detectLuckyActivity(){
+  const root = getGuidapRoot();
+
+  // 1) On récupère un "texte activité" fiable (mobile + desktop)
+  const activityText = norm([
+    ...root.querySelectorAll(
+      ".g-group-field-label, .package-item-name-content, .package-item-name"
+    )
+  ].map(n => n.textContent || "").join(" "));
+
+  // 2) On garde aussi un fallback global (au cas où)
+  const bodyTxt = norm(document.body?.innerText || "");
+  const txt = activityText + " " + bodyTxt;
+
+  // 3) Ton mapping
+  const activeTab =
+    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const tab = norm(activeTab);
+
+  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
+  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
+  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
+
+  return "default";
+}
 
 
 function getReservationContextText(){
@@ -1213,8 +1244,42 @@ function getReservationContextText(){
 
   return "";
 }
-	
+
+function getGuidapRoot(){
+  return document.getElementById("guidap-popups")
+    || document.querySelector("guidap-booking-widget")
+    || document.body;
+}
+
 function detectLuckyActivity(){
+  const root = getGuidapRoot();
+
+  // 1) On récupère un "texte activité" fiable (mobile + desktop)
+  const activityText = norm([
+    ...root.querySelectorAll(
+      ".g-group-field-label, .package-item-name-content, .package-item-name"
+    )
+  ].map(n => n.textContent || "").join(" "));
+
+  // 2) On garde aussi un fallback global (au cas où)
+  const bodyTxt = norm(document.body?.innerText || "");
+  const txt = activityText + " " + bodyTxt;
+
+  // 3) Ton mapping
+  const activeTab =
+    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const tab = norm(activeTab);
+
+  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
+  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
+  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
+
+  return "default";
+}
+
+	
+/*function detectLuckyActivity(){
   const ctx = getReservationContextText();
   const txt = ctx || norm(document.body?.innerText || ""); 
   const activeTab =
@@ -1243,7 +1308,7 @@ function detectLuckyActivity(){
   ) return "escape";
 
   return "default";
-}
+}*/
 
 
 
