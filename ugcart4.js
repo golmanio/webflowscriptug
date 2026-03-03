@@ -1175,6 +1175,76 @@ function isVisible(el){
   const r = el.getBoundingClientRect?.();
   return r && r.width > 2 && r.height > 2;
 }
+
+function getGuidapRoot(){
+  return document.getElementById("guidap-popups")
+    || document.querySelector("guidap-booking-widget")
+    || document.body;
+}
+
+function norm(s){
+  return (s||"")
+    .toLowerCase()
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[’']/g, "'")
+    .trim();
+}
+
+// ✅ lecture stable : nom du forfait sélectionné (marche en mobile)
+function getSelectedPackageText(){
+  const root = getGuidapRoot();
+
+  const sel =
+    root.querySelector(".package-field-item.selected .package-item-name-content") ||
+    root.querySelector(".package-field-item.selected .package-item-name") ||
+    root.querySelector(".package-field-item.selected") ||
+    null;
+
+  if (!sel) return "";
+  return norm(sel.innerText || sel.textContent || "");
+}
+
+// (optionnel) fallback : texte guidap global, sans filtre “visible”
+function getGuidapText(){
+  const root = getGuidapRoot();
+  return norm(root.innerText || root.textContent || "");
+}
+
+function detectLuckyActivity(){
+  // 1) ✅ le plus fiable
+  const pkg = getSelectedPackageText();
+
+  // 2) fallback guidap
+  const gtxt = getGuidapText();
+
+  // 3) fallback body (au cas où)
+  const btxt = norm(document.body?.innerText || "");
+
+  const txt = (pkg + " " + gtxt + " " + btxt).trim();
+
+  // Webflow tab (si dispo)
+  const activeTab =
+    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
+  const tab = norm(activeTab);
+
+  if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant"))
+    return "enfants";
+
+  if (txt.includes("les tarifs classique") || tab.includes("classique"))
+    return "classique";
+
+  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf"))
+    return "evg";
+
+  if (txt.includes("escape game") || tab.includes("escape"))
+    return "escape";
+
+  return "default";
+}
+
+
+
 /*function getReservationContextText(){
   const selectors = [
     ".reservation-recap",       
@@ -1206,74 +1276,6 @@ function isVisible(el){
 
   return "";
 }*/
-	
-	
-	
-function getGuidapRoot(){
-  return document.getElementById("guidap-popups")
-    || document.querySelector("guidap-booking-widget")
-    || document.body;
-}
-function isReallyVisible(el){
-  if(!el || !el.isConnected) return false;
-  const cs = getComputedStyle(el);
-  if(cs.display === "none" || cs.visibility === "hidden") return false;
-  if(Number(cs.opacity) === 0) return false;
-  if(el.hasAttribute("hidden")) return false;
-  if(el.getAttribute("aria-hidden") === "true") return false;
-  const r = el.getBoundingClientRect();
-  return r.width > 2 && r.height > 2;
-}
-function getReservationContextText(){
-  const root = getGuidapRoot();
-  const selectors = [
-    ".reservation-recap",
-    ".reservation-recap-mobile",
-    ".activity-info-reservation",
-    ".cart-recap-bottom-container",
-    ".cart-recap-bottom",
-  ];
-
-  for (const sel of selectors){
-    const nodes = Array.from(root.querySelectorAll(sel)).filter(isReallyVisible);
-    for (const n of nodes){
-      const t = norm(n.innerText || "");
-      if (t.includes("votre réservation") || t.includes("total") || t.includes("nombre de participants")){
-        return t;
-      }
-    }
-  }
-
-  // fallback GUIDAP ONLY (pas body)
-  const any = Array.from(root.querySelectorAll("div,section,aside,article")).filter(isReallyVisible);
-  const recap = any.find(el => norm(el.innerText||"").includes("votre réservation"));
-  return recap ? norm(recap.innerText||"") : "";
-}	
-	
-function detectLuckyActivity(){
-  const ctx = getReservationContextText();
-  const bodyTxt = norm(document.body?.innerText || "");
-  const txt = (ctx ? (ctx + " ") : "") + bodyTxt; // ✅ FIX
-
-  const activeTab =
-    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
-  const tab = norm(activeTab);
-
-  if (
-    txt.includes("les tarifs enfants") ||
-    txt.includes("anniversaire") ||
-    tab.includes("anniversaire") ||
-    tab.includes("enfant")
-  ) return "enfants";
-
-  if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
-
-  if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
-
-  if (txt.includes("escape game") || tab.includes("escape")) return "escape";
-
-  return "default";
-}	
 	
 /*function detectLuckyActivity(){
   const ctx = getReservationContextText();
