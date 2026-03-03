@@ -1176,6 +1176,18 @@ function luckyLog(...a){ if (LUCKY_DEBUG) console.log("[lucky]", ...a); }
 // ──────────────────────────────────────────────
 // LUCKY: SPA-safe armer/désarmer (anti-spam)
 // ──────────────────────────────────────────────
+function collectTexts(root){ 
+const pick = (sel) => Array.from(root.querySelectorAll(sel)).map(n => (n.textContent || "").trim()); 
+// 1) item sélectionné (quand Guidap marque le choix)
+const selected = pick( ".g-item-box.selected .package-item-name-content," + ".g-item-box.selected .package-item-name," + ".package-field-item.selected .package-item-name-content," + ".package-field-item.selected .package-item-name," + "[aria-selected='true'] .package-item-name-content," + "[aria-selected='true'] .package-item-name" ); 
+// 2) fallback: tous les noms de packages visibles (utile step 1 mobile) 
+const names = pick(".package-item-name-content, .package-item-name"); 
+// 3) labels/headers de steps (souvent stable mobile) 
+const labels = pick(".g-group-field-label, .g-step-page-title, .g-step-page-subtitle"); 
+// 4) (optionnel) texte global Guidap (pas body entier, sinon bruit “anniversaire” etc) 
+const rootText = (root.innerText || root.textContent || "").slice(0, 1200); 
+return { selected: norm(selected.join(" ")), names: norm(names.join(" ")), labels: norm(labels.join(" ")), rootText: norm(rootText), }; }
+
 function getGuidapRootStrict(){
   return document.getElementById("guidap-popups")
     || document.querySelector("guidap-booking-widget")
