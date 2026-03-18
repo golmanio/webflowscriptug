@@ -627,7 +627,8 @@ function findExtraPersonRule() {
 
   for (const c of cards) {
     const txt = `${c.name} ${c.details}`.toLowerCase();
-    const m = c.name.match(/groupe\s+(\d+)\s+personne(?:s)?\s+et\s+plus/i);
+    // const m = c.name.match(/groupe\s+(\d+)\s+personne(?:s)?\s+et\s+plus/i);
+	const m = c.name.match(/groupe(?:\s+de)?\s+(\d+)\s+personne(?:s)?\s+et\s+plus/i);
     if (!m) continue;
 
     const threshold = parseInt(m[1], 10);
