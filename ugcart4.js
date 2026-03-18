@@ -33,6 +33,9 @@ function isChooseActivityStep() {
   const txt = norm(document.body?.innerText || "");
   return txt.includes("choisissez votre activité");
 }
+function isParticipantsSelectEditable() {
+  return isChooseActivityStep();
+}
 
 function getOptionsFingerprint() {
   const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
@@ -553,6 +556,18 @@ function ensureBox(card) {
   return true;
 }
 
+function syncParticipantsSelectState() {
+  const sel = document.getElementById("participantsSelect");
+  if (!sel) return;
+
+  const editable = isParticipantsSelectEditable();
+
+  sel.disabled = !editable;
+  sel.style.opacity = editable ? "1" : "0.65";
+  sel.style.cursor = editable ? "pointer" : "not-allowed";
+  sel.style.backgroundColor = editable ? "#fff" : "#f3f4f6";
+}
+
 function getQtyInputFromOptionCard(cardEl) {
   return cardEl?.querySelector('input[type="number"]') || null;
 }
@@ -881,7 +896,14 @@ async function update(card) {
       if (!sel || sel.dataset.wired) return;
       sel.dataset.wired = "1";
       // sel.addEventListener("change", () => update(card));
-	  sel.addEventListener("change", () => safeUpdate(card));
+	  // sel.addEventListener("change", () => safeUpdate(card));
+		  sel.addEventListener("change", () => {
+		  if (!isParticipantsSelectEditable()) {
+			sel.value = String(lastParticipants);
+			return;
+		  }
+		  safeUpdate(card);
+		});
     }
 
     function attachCardObserver(card) {
@@ -983,6 +1005,7 @@ function tick() {
 
   
   if (!ensureBox(card)) return;
+  syncParticipantsSelectState();
   wire(card);
 
   if (observedCard !== card) attachCardObserver(card);
