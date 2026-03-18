@@ -19,6 +19,66 @@ const MAX_PARTICIPANTS = 40;
 const LS_KEY = "unigames_participants";
 const DEFAULT_PARTICIPANTS = 10;
 
+//NEW HELPERS :
+
+let autoFirstTariffLastFp = "";
+let autoFirstTariffLastClickAt = 0;
+
+function shouldSkipAutoFirstTariff() {
+  const txt = norm(document.body?.innerText || "");
+  return txt.includes("bordeaux - les tarifs classique");
+}
+
+function isChooseActivityStep() {
+  const txt = norm(document.body?.innerText || "");
+  return txt.includes("choisissez votre activité");
+}
+
+function getOptionsFingerprint() {
+  const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
+  if (!cards.length) return "";
+  return cards
+    .map(c => `${c.name}|${c.amountText}|${c.details}`)
+    .join("||");
+}
+
+function autoSelectFirstTariffIfNeeded() {
+  if (!isChooseActivityStep()) return false;
+  if (shouldSkipAutoFirstTariff()) return false;
+
+  const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
+  if (!cards.length) return false;
+
+  const first = cards[0];
+  if (!first?.el) return false;
+
+  // si le premier tarif est déjà sélectionné, on ne fait rien
+  if ((first.qty || 0) > 0) return false;
+
+  const { plus } = getPlusMinusButtons(first.el);
+  if (!plus || plus.disabled) return false;
+
+  const fp = getOptionsFingerprint();
+  if (!fp) return false;
+
+  const now = Date.now();
+
+  if (fp === autoFirstTariffLastFp && (now - autoFirstTariffLastClickAt) < 1800) {
+    return false;
+  }
+
+  autoFirstTariffLastFp = fp;
+  autoFirstTariffLastClickAt = now;
+
+  plus.click();
+
+  setTimeout(() => tick(), 60);
+  setTimeout(() => tick(), 180);
+  setTimeout(() => tick(), 420);
+
+  return true;
+}
+
 
 function deepQueryAll(selector, root = document) {
   const out = [];
@@ -120,6 +180,8 @@ function remountGuidapWidget(reason = "") {
   stableRecap = null;
   observedCard = null;
   lastWidgetNode = null;
+autoFirstTariffLastFp = "";
+autoFirstTariffLastClickAt = 0;
   burstTick(3500);
 }
 function climbAnyTree(node, predicate) {
@@ -165,6 +227,8 @@ function burstTick(ms = 2500) {
 	
 function hardReset(reason = "") {
   stableRecap = null;
+	autoFirstTariffLastFp = "";
+	autoFirstTariffLastClickAt = 0;
   try { console.log("[pp] hardReset", reason); } catch {}
   if (hardResetting) return;
   hardResetting = true;
@@ -917,10 +981,18 @@ function tick() {
 		return;
 	  }	
 
+  
   if (!ensureBox(card)) return;
   wire(card);
 
   if (observedCard !== card) attachCardObserver(card);
+
+
+	  if (autoSelectFirstTariffIfNeeded()) {
+	  return;
+	}
+
+
 
   // update(card);
   safeUpdate(card);
@@ -1012,6 +1084,64 @@ function looksLikePlusMinusButton(btn) {
 
   return false;
 }
+
+function getFirstOptionMeta() {
+  const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
+  return cards.length ? cards[0] : null;
+}
+
+document.addEventListener("click", (e) => {
+  try {
+    if (!isChooseActivityStep()) return;
+	if (shouldSkipAutoFirstTariff()) return;
+    if (extraRuleSyncBusy) return;
+
+    const first = getFirstOptionMeta();
+    if (!first?.el) return;
+
+    const path = e.composedPath ? e.composedPath() : [];
+    const btn = path.find(n => n && n.tagName && n.tagName.toLowerCase() === "button") || null;
+    if (!btn) return;
+
+    if (!first.el.contains(btn)) return;
+    if (!looksLikePlusMinusButton(btn)) return;
+    if (btn.disabled) return;
+
+    const txt = (btn.textContent || "").replace(/\s+/g, " ").trim();
+    const aria = (btn.getAttribute("aria-label") || "").trim();
+
+    const isMinus = txt === "-" || aria === "-";
+    if (!isMinus) return;
+
+    const beforeQty = readOptionQty(first.el);
+    if (beforeQty !== 1) return;
+
+    setTimeout(async () => {
+      try {
+        const freshFirst = getFirstOptionMeta();
+        if (!freshFirst?.el) return;
+
+        const changed = await waitForOptionQtyChange(freshFirst.el, beforeQty, 900);
+        const afterQty = readOptionQty(freshFirst.el);
+
+        if ((changed || afterQty !== beforeQty) && afterQty === 0) {
+          const { plus } = getPlusMinusButtons(freshFirst.el);
+          if (plus && !plus.disabled) {
+            plus.click();
+            setTimeout(() => tick(), 30);
+            setTimeout(() => tick(), 120);
+            setTimeout(() => tick(), 260);
+          }
+        }
+      } catch (err) {
+        console.warn("[pp] instant first tariff restore error", err);
+      }
+    }, 0);
+  } catch (err) {
+    console.warn("[pp] first tariff minus handler error", err);
+  }
+}, true);
+
 function scheduleStepperRefresh() {
   const now = Date.now();
   if (now - lastStepRefresh < 120) return;
