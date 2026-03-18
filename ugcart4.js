@@ -2869,21 +2869,21 @@ document.addEventListener("click", async (e) => {
   const GOOGLE_ZONE_CONFIG = {
     landes: {
       label: "Google",
-      url: "https://maps.app.goo.gl/TON-LIEN-LANDES",
-      rating: 4.9,
-      reviews: 128
+      url: "https://www.google.com/maps/place/UniGames+Landes+-+Bubble+Foot+%2F+Archery-Games+%2F+Laser+Game+%2F+Escape+Game+%26+Murder+Party+Landes,+45+Rte+de+Hort,+40990+Saint-Vincent-de-Paul/data=!4m2!3m1!1s0xd56a7246bac4acb:0xb7255dbddb3b9eea!18m1!1e1?utm_source=mstt_1&entry=gps&coh=192189&g_ep=CAESBzI2LjExLjYYACCenQoqnQEsOTQyNjc3MjcsOTQyOTIxOTUsOTQyOTk1MzIsMTAwNzk2NDk4LDEwMDc5Nzc2MSwxMDA3OTY1MzUsOTQyODQ0OTYsOTQyODA1NzYsOTQyMDczOTQsOTQyMDc1MDYsOTQyMDg1MDYsOTQyMTg2NTMsOTQyMjk4MzksOTQyNzUxNjgsOTQyNzk2MTksOTQyNjI3MzMsMTAwNzk2MTg2QgJGUg%3D%3D&skid=3501c5d4-1e13-45db-b7d7-1ff2600055bf",
+      rating: 4.8,
+      reviews: 51
     },
     pau: {
       label: "Google",
-      url: "https://maps.app.goo.gl/TON-LIEN-PAU",
-      rating: 4.8,
-      reviews: 86
+      url: "https://www.google.com/maps/place/UniGames+Pau+Lescar+-+Bubble+Foot+%2F+Archery+Game+%2F+Laser+Game+%2F+Escape+Game+%26+Murder+Party,+10+Chem.+des+3+Ponts,+64230+Lescar/data=!4m2!3m1!1s0xd564f4430cb219b:0x4c93ea9b896833c5!18m1!1e1?utm_source=mstt_1&entry=gps&coh=192189&g_ep=CAESBzI2LjExLjYYACCenQoqnQEsOTQyNjc3MjcsOTQyOTIxOTUsOTQyOTk1MzIsMTAwNzk2NDk4LDEwMDc5Nzc2MSwxMDA3OTY1MzUsOTQyODQ0OTYsOTQyODA1NzYsOTQyMDczOTQsOTQyMDc1MDYsOTQyMDg1MDYsOTQyMTg2NTMsOTQyMjk4MzksOTQyNzUxNjgsOTQyNzk2MTksOTQyNjI3MzMsMTAwNzk2MTg2QgJGUg%3D%3D&skid=3e5d3e90-0c95-4b8d-9bf2-5a1222beef44&g_st=ac",
+      rating: 4.9,
+      reviews: 59
     },
     bordeaux: {
       label: "Google",
-      url: "https://maps.app.goo.gl/TON-LIEN-BORDEAUX",
+      url: "https://google.com/maps/place/Bubble+Foot+Bordeaux+-+UniGames+%7C+Laser,+Archery,+Escape+%26+Murder,+16+Av.+Louis+de+Broglie,+33600+Pessac/data=!4m2!3m1!1s0xd54d92944c36b47:0xb0a5dd72a273165c!18m1!1e1?utm_source=mstt_1&entry=gps&coh=192189&g_ep=CAESBzI2LjExLjYYACCenQoqnQEsOTQyNjc3MjcsOTQyOTIxOTUsOTQyOTk1MzIsMTAwNzk2NDk4LDEwMDc5Nzc2MSwxMDA3OTY1MzUsOTQyODQ0OTYsOTQyODA1NzYsOTQyMDczOTQsOTQyMDc1MDYsOTQyMDg1MDYsOTQyMTg2NTMsOTQyMjk4MzksOTQyNzUxNjgsOTQyNzk2MTksOTQyNjI3MzMsMTAwNzk2MTg2QgJGUg%3D%3D&skid=651c1105-3552-4405-a695-15ae4bc4e4cd&g_st=ac",
       rating: 5.0,
-      reviews: 214
+      reviews: 351
     },
     default: {
       label: "Google",
