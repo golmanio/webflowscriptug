@@ -1,4 +1,3 @@
-// ===== GLOBAL HELPERS (shared across all IIFE) =====
 window.__ug_norm = window.__ug_norm || function (s) {
   return (s || "")
     .toLowerCase()
@@ -6,8 +5,6 @@ window.__ug_norm = window.__ug_norm || function (s) {
     .replace(/[’']/g, "'")
     .trim();
 };
-
-
   (function () {
     const DEBUG = false;
 
@@ -17,8 +14,6 @@ window.__ug_norm = window.__ug_norm || function (s) {
       let t;
       return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
     };
-
-
 const MIN_PARTICIPANTS = 6;
 const MAX_PARTICIPANTS = 40;
 const LS_KEY = "unigames_participants";
@@ -29,31 +24,22 @@ function deepQueryAll(selector, root = document) {
   const out = [];
   const walk = (node) => {
     if (!node) return;
-
-    // Document
     if (node.nodeType === 9) {
       out.push(...node.querySelectorAll(selector));
       walk(node.documentElement);
       return;
     }
-
-    // Element
     if (node.nodeType === 1) {
-      // query in light DOM
-      out.push(...node.querySelectorAll(selector));
 
-      // traverse shadow DOM
+      out.push(...node.querySelectorAll(selector));
       const sr = node.shadowRoot;
       if (sr) {
         out.push(...sr.querySelectorAll(selector));
-        // walk inside shadow root elements
         sr.querySelectorAll("*").forEach(walk);
       }
     }
   };
-
   walk(root);
-  // dedupe
   return Array.from(new Set(out));
 }
 
@@ -292,7 +278,21 @@ document.addEventListener("click", (e) => {
 	  if (!t.includes("€")) return null;
 	  const m = t.match(/(\d[\d\s.\u00A0]*,\d{2})\s*€/);
 	  return m ? (m[1] + " €") : null;
-	}	
+	}
+
+function isFinalInfoStep() {
+  const txt = norm(document.body?.innerText || "");
+  const hasInfos =
+    txt.includes("vos informations") ||
+    txt.includes("finalisez votre commande");
+
+  const hasForm =
+    !!document.querySelector('input[name="given-name"][autocomplete="given-name"]') ||
+    !!document.querySelector('input[type="email"]') ||
+    !!document.querySelector('input[name="family-name"]');
+
+  return hasInfos && hasForm;
+}	
 
     function log(...a){ if (DEBUG) console.log("[pp]", ...a); }
 
@@ -319,56 +319,125 @@ document.addEventListener("click", (e) => {
       return null;
     }
 
-
-
-
 function getTotalText(card) {
-  if (!card) return null;
-  const isInPP = (el) => !!el?.closest?.("#participantsBox");
+  const box = document.getElementById("participantsBox");
+  if (!box) return null;
 
-  const els = Array.from(card.querySelectorAll("*")).filter(el => !isInPP(el));
-
-  const extractEuro = (txt) => {
+  const extractEuroNumber = (txt) => {
     if (!txt) return null;
-    const t = txt.replace(/\s+/g, " ").trim();
-    const m = t.match(/(\d[\d\s\u00A0]*,\d{2})\s*€/);
-    return m ? (m[1] + " €") : null;
+
+    const t = String(txt).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+
+    // accepte aussi les montants négatifs, ex: -10,00 €
+    const m = t.match(/(-?\d[\d\s]*,\d{2})\s*€/);
+    if (!m) return null;
+
+    const num = Number(
+      m[1]
+        .replace(/\s/g, "")
+        .replace(/\./g, "")
+        .replace(",", ".")
+    );
+
+    return Number.isFinite(num) ? num : null;
   };
 
-  for (const el of els) {
-    const label = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-    if (label !== "total") continue;
+  const formatEuroText = (n) => {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: "EUR"
+    }).format(n);
+  };
 
-    const row =
-      el.closest("div,li,p,section,article") ||
-      el.parentElement;
+  const scope =
+    box.closest(".step-cart-recap") ||
+    box.closest(".reservation-recap-desktop") ||
+    box.closest(".reservation-recap-mobile") ||
+    box.closest(".cart-recap-bottom") ||
+    card ||
+    document;
 
-    const fromRow = extractEuro(row?.textContent || "");
-    if (fromRow) return fromRow;
+  // 1) panier / finalisation : addition de toutes les lignes visibles du récap,
+  // y compris les lignes négatives (coupon)
+  const recapRows = Array.from(scope.querySelectorAll(".step-cart-recap-sub.is-flex"));
+  if (recapRows.length) {
+    const values = recapRows
+      .map(row => {
+        const priceEl = row.querySelector(".step-cart-recap-sub-price");
+        return extractEuroNumber(priceEl?.textContent || "");
+      })
+      .filter(v => Number.isFinite(v));
 
-    const parent = row?.parentElement || el.parentElement;
-    if (parent) {
-      const kids = Array.from(parent.children).filter(x => !isInPP(x));
-      const idx = kids.indexOf(row || el);
-      for (let i = idx + 1; i < Math.min(kids.length, idx + 6); i++) {
-        const found = extractEuro(kids[i].textContent || "");
-        if (found) return found;
-      }
+    if (values.length) {
+      const sum = values.reduce((a, b) => a + b, 0);
+      return formatEuroText(sum);
     }
   }
-  for (const el of els) {
-    const t = (el.textContent || "").replace(/\s+/g, " ").trim();
-    if (!t) continue;
-    if (/^total\b/i.test(t) && t.includes("€")) {
-      const euro = extractEuro(t);
-      if (euro) return euro;
-    }
+
+  // 2) total desktop guidap
+  const desktopTotalEl =
+    scope.querySelector(".reservation-recap-desktop-total .column:last-of-type") ||
+    scope.querySelector(".reservation-recap-desktop-total .column.is-flex:last-of-type");
+
+  if (desktopTotalEl) {
+    const v = extractEuroNumber(desktopTotalEl.textContent || "");
+    if (Number.isFinite(v)) return formatEuroText(v);
+  }
+
+  // 3) total mobile guidap
+  const mobilePriceEl = scope.querySelector(".reservation-recap-mobile-price");
+  if (mobilePriceEl) {
+    const v = extractEuroNumber(mobilePriceEl.textContent || "");
+    if (Number.isFinite(v)) return formatEuroText(v);
+  }
+
+  // 4) fallback ligne "Total"
+  const allNodes = Array.from(scope.querySelectorAll("*"));
+  for (const el of allNodes) {
+    const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (txt !== "total") continue;
+
+    const row = el.closest("div,li,p,section,article") || el.parentElement;
+    if (!row) continue;
+
+    const v = extractEuroNumber(row.textContent || "");
+    if (Number.isFinite(v)) return formatEuroText(v);
   }
 
   return null;
 }
 
+function hasReservationSelection(card) {
+  return !!getTotalText(card);
+}
 
+function hasAnySelectedPaidOption() {
+  const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
+  return cards.some(c => c.qty > 0);
+}
+
+function shouldForceNoTotal(card) {
+  if (!card) return true;
+
+  // Sur la dernière étape "Vos informations", on ne force jamais le "pas de total"
+  // car on veut pouvoir réutiliser le dernier total valide.
+  if (isFinalInfoStep()) return false;
+
+  const optionCards = getOptionCards().map(readOptionMeta).filter(Boolean);
+
+  // Sur la page des tarifs/options :
+  // s'il y a des cartes d'options visibles mais aucune quantité sélectionnée,
+  // on force "Total non détecté".
+  if (optionCards.length > 0) {
+    const hasSelectedOption = optionCards.some(c => c.qty > 0);
+    if (!hasSelectedOption) return true;
+  }
+
+  const totalText = getTotalText(card) || readTotalFromXPath() || null;
+  if (!totalText || !totalText.includes("€")) return true;
+
+  return false;
+}
 
 
 function ensureBox(card) {
@@ -391,20 +460,26 @@ function ensureBox(card) {
     box.id = "participantsBox";
     box.style.marginTop = "12px";
     box.style.marginBottom = "12px";
-    box.innerHTML = `
-      <div style="font-weight:700; margin-bottom:6px;">Nombre de participants</div>
-      <select id="participantsSelect"
-        style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; font-size:14px;">
-        ${Array.from({ length: (MAX_PARTICIPANTS - MIN_PARTICIPANTS + 1) }, (_, i) => i + MIN_PARTICIPANTS).map(n => `<option value="${n}">${n}</option>`).join("")}
-      </select>
-      <div style="margin-top:10px; margin-bottom:12px;">
-        <div id="participantsHint"
-          style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb;
-                 color:#111827; font-size:14px; line-height:1.35;">
-          <span style="color:#6b7280;">Choisis un nombre pour afficher le prix par personne.</span>
-        </div>
-      </div>
-    `;
+	box.innerHTML = `
+	  <div style="font-weight:700; margin-bottom:6px;">Nombre de participants</div>
+
+	  <div id="participantsResponsiveRow" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+		<div id="participantsSelectWrap" style="width:100%;">
+		  <select id="participantsSelect"
+			style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; font-size:14px;">
+			${Array.from({ length: (MAX_PARTICIPANTS - MIN_PARTICIPANTS + 1) }, (_, i) => i + MIN_PARTICIPANTS).map(n => `<option value="${n}">${n}</option>`).join("")}
+		  </select>
+		</div>
+
+		<div id="participantsHintWrap" style="width:100%;">
+		  <div id="participantsHint"
+			style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb;
+				   color:#111827; font-size:14px; line-height:1.35;">
+			<span style="color:#6b7280;">Choisis un nombre pour afficher le prix par personne.</span>
+		  </div>
+		</div>
+	  </div>
+	`;
     targetBtn.parentElement.insertBefore(box, targetBtn);
   }
 
@@ -414,50 +489,341 @@ function ensureBox(card) {
   return true;
 }
 
+function getQtyInputFromOptionCard(cardEl) {
+  return cardEl?.querySelector('input[type="number"]') || null;
+}
+
+function getPlusMinusButtons(cardEl) {
+  if (!cardEl) return { plus: null, minus: null };
+
+  const buttons = Array.from(cardEl.querySelectorAll("button"));
+  let plus = null;
+  let minus = null;
+
+  for (const b of buttons) {
+    const aria = (b.getAttribute("aria-label") || "").trim();
+    const txt = (b.textContent || "").replace(/\s+/g, " ").trim();
+
+    if (aria === "+" || txt === "+") plus = b;
+    if (aria === "-" || txt === "-") minus = b;
+  }
+
+  return { plus, minus };
+}
+
+function readOptionQty(cardEl) {
+  const input = getQtyInputFromOptionCard(cardEl);
+  if (!input) return 0;
+  const v = parseInt(input.value || "0", 10);
+  return Number.isFinite(v) ? v : 0;
+}
+
+function waitForOptionQtyChange(cardEl, previousQty, timeoutMs = 1800) {
+  return new Promise((resolve) => {
+    const input = getQtyInputFromOptionCard(cardEl);
+    if (!input) {
+      resolve(false);
+      return;
+    }
+
+    let done = false;
+    let obs = null;
+    let to = null;
+
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      try { obs && obs.disconnect(); } catch {}
+      if (to) clearTimeout(to);
+      resolve(ok);
+    };
+
+    const check = () => {
+      const now = readOptionQty(cardEl);
+      if (now !== previousQty) finish(true);
+    };
+
+    obs = new MutationObserver(check);
+    try {
+      obs.observe(input, {
+        attributes: true,
+        attributeFilter: ["value"]
+      });
+    } catch {}
+
+    input.addEventListener("input", check, { once: false });
+    input.addEventListener("change", check, { once: false });
+
+    to = setTimeout(() => {
+      const now = readOptionQty(cardEl);
+      finish(now !== previousQty);
+    }, timeoutMs);
+
+    requestAnimationFrame(check);
+  });
+}
+
+function getOptionCards() {
+  return Array.from(
+    document.querySelectorAll(
+      ".price-field-item .g-item, .price-field-item"
+    )
+  );
+}
 
 
-    function update(card) {
-      const sel = document.getElementById("participantsSelect");
-      const hint = document.getElementById("participantsHint");
-      if (!sel || !hint || !card) return;
 
-	  const n = setParticipants(sel.value);
-	  lastParticipants = n;
-	  sel.value = String(n);
+function parsePriceTextToNumber(str) {
+  if (!str) return null;
 
-      const totalText = getTotalText(card);
-	  if (totalText) lastSeenTotal = totalText;
-      const totalVal = parseEuroToNumber(totalText);
+  const cleaned = String(str)
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, "")
+    .replace("€", "")
+    .replace(/\./g, "")
+    .replace(",", ".");
 
-      if (!totalVal) {
-        hint.innerHTML = `<span style="color:#6b7280;">Total non détecté pour l’instant.</span>`;
-        return;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+function readOptionMeta(cardEl) {
+  if (!cardEl) return null;
+
+  const root = cardEl.matches(".g-item") ? cardEl : (cardEl.querySelector(".g-item") || cardEl);
+
+  const nameEl = root.querySelector(".quantity-item-name");
+  const amountEl = root.querySelector(".quantity-item-amount");
+  const detailsEl = root.querySelector(".quantity-item-details");
+
+  const name = (nameEl?.textContent || "").replace(/\s+/g, " ").trim();
+  const details = (detailsEl?.textContent || "").replace(/\s+/g, " ").trim();
+  const amountText = (amountEl?.textContent || "").replace(/\s+/g, " ").trim();
+  const amount = parsePriceTextToNumber(amountText);
+  const qty = readOptionQty(root);
+
+  return {
+    el: root,
+    name,
+    details,
+    amountText,
+    amount,
+    qty
+  };
+}
+function computeExtraPersons(participants, threshold) {
+  participants = parseInt(participants, 10);
+  threshold = parseInt(threshold, 10);
+
+  if (!Number.isFinite(participants) || !Number.isFinite(threshold)) return 0;
+
+  // Ex: seuil 13
+  // 12 => 0
+  // 13 => 1
+  // 22 => 10
+  return Math.max(0, participants - (threshold - 1));
+}
+function findExtraPersonRule() {
+  const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
+
+  for (const c of cards) {
+    const txt = `${c.name} ${c.details}`.toLowerCase();
+    const m = c.name.match(/groupe\s+(\d+)\s+personne(?:s)?\s+et\s+plus/i);
+    if (!m) continue;
+
+    const threshold = parseInt(m[1], 10);
+    if (!Number.isFinite(threshold)) continue;
+
+    const isPerPerson =
+      /prix\s*\/\s*personne/i.test(txt) ||
+      /par\s*personne/i.test(txt);
+
+    if (!isPerPerson) continue;
+    if (!Number.isFinite(c.amount)) continue;
+
+    const input = getQtyInputFromOptionCard(c.el);
+    const { plus, minus } = getPlusMinusButtons(c.el);
+
+    return {
+      threshold,
+      pricePerPerson: c.amount,
+      currentQty: readOptionQty(c.el),
+      card: c,
+      input,
+      plus,
+      minus
+    };
+  }
+
+  return null;
+}
+
+let extraRuleSyncBusy = false;
+let extraRuleLastWantedQty = null;
+let manualParticipantsSyncUntil = 0;
+let manualParticipantsWanted = null;
+let manualHintFreezeUntil = 0;
+let manualHintText = "";
+
+async function syncExtraRuleQuantity(participants) {
+  const rule = findExtraPersonRule();
+  if (!rule || !rule.card?.el) return false;
+
+  const wantedQty = computeExtraPersons(participants, rule.threshold);
+  const currentQty = readOptionQty(rule.card.el);
+
+  extraRuleLastWantedQty = wantedQty;
+
+  if (currentQty === wantedQty) return false;
+  if (extraRuleSyncBusy) return false;
+
+  extraRuleSyncBusy = true;
+
+  try {
+    let guard = 0;
+
+    while (guard < 60) {
+      guard++;
+
+      const freshRule = findExtraPersonRule();
+      if (!freshRule || !freshRule.card?.el) break;
+
+      const qtyNow = readOptionQty(freshRule.card.el);
+      const target = computeExtraPersons(participants, freshRule.threshold);
+
+      if (qtyNow === target) {
+        return true;
       }
 
-      const per = totalVal / n;
-      hint.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:12px;">
-          <span style="color:#374151;">Total</span>
-          <span style="font-weight:900;">${formatEuroFR(totalVal)}</span>
-        </div>
-        <div style="margin-top:6px; font-weight:900; font-size:15px;">
-          ≈ ${formatEuroFR(per)} <span style="font-weight:700; font-size:14px;">/ personne</span>
-          <span style="font-weight:700; color:#6b7280; font-size:13px;">(pour ${n})</span>
+      const needPlus = qtyNow < target;
+      const btn = needPlus ? freshRule.plus : freshRule.minus;
+
+      if (!btn || btn.disabled) break;
+
+      btn.click();
+
+      const changed = await waitForOptionQtyChange(freshRule.card.el, qtyNow);
+      if (!changed) {
+        // re-check direct au cas où le DOM a rerender sans event exploitable
+        const after = readOptionQty(freshRule.card.el);
+        if (after === qtyNow) break;
+      }
+    }
+
+    return true;
+  } finally {
+    extraRuleSyncBusy = false;
+    setTimeout(() => tick(), 0);
+    setTimeout(() => tick(), 180);
+    setTimeout(() => tick(), 500);
+  }
+}
+
+async function update(card) {
+  const sel = document.getElementById("participantsSelect");
+  const hint = document.getElementById("participantsHint");
+  if (!sel || !hint || !card) return;
+
+  const n = setParticipants(sel.value);
+  lastParticipants = n;
+  sel.value = String(n);
+
+  if (isParticipantsHintFrozen()) {
+    if (manualHintText) hint.innerHTML = manualHintText;
+    return;
+  }
+
+  const rule = findExtraPersonRule();
+
+  if (rule && !extraRuleSyncBusy && !isManualParticipantsSyncActive()) {
+    const wantedQty = computeExtraPersons(n, rule.threshold);
+    const currentQty = readOptionQty(rule.card.el);
+
+    if (currentQty !== wantedQty) {
+      hint.innerHTML = `<span style="color:#6b7280;">Mise à jour du panier en cours…</span>`;
+      await syncExtraRuleQuantity(n);
+    }
+  }
+
+  const finalInfoStep = isFinalInfoStep();
+
+  if (shouldForceNoTotal(card) && !finalInfoStep) {
+    lastSeenTotal = null;
+    hint.innerHTML = `<span style="color:#6b7280;">Total non détecté pour l’instant.</span>`;
+    return;
+  }
+
+  let totalText = getTotalText(card) || readTotalFromXPath() || null;
+
+  // Sur la dernière page "Vos informations", si aucun total n'est visible,
+  // on réutilise le dernier total valide vu précédemment.
+  if (!totalText && finalInfoStep && lastSeenTotal) {
+    totalText = lastSeenTotal;
+  }
+
+  if (!totalText) {
+    if (!finalInfoStep) {
+      lastSeenTotal = null;
+    }
+    hint.innerHTML = `<span style="color:#6b7280;">Total non détecté pour l’instant.</span>`;
+    return;
+  }
+
+  const totalVal = parseEuroToNumber(totalText);
+
+  if (!totalVal) {
+    if (!finalInfoStep) {
+      lastSeenTotal = null;
+    }
+    hint.innerHTML = `<span style="color:#6b7280;">Total non détecté pour l’instant.</span>`;
+    return;
+  }
+
+  lastSeenTotal = totalText;
+
+  const per = totalVal / n;
+
+  let extraHtml = "";
+  const freshRule = findExtraPersonRule();
+  const isMobile = window.innerWidth <= 768;
+
+  if (freshRule && !isMobile) {
+    const extraQty = readOptionQty(freshRule.card.el);
+    if (extraQty > 0) {
+      extraHtml = `
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid #e5e7eb; color:#374151; font-size:13px; line-height:1.35;">
+          À partir de <b>${freshRule.threshold}</b> participants: <b>tarif par personne</b><br>
+          <b>${extraQty}</b> Participant(s) supplémentaire(s) : <b>${extraQty}</b> × ${formatEuroFR(freshRule.pricePerPerson)}
         </div>
       `;
     }
+  }
+
+  hint.innerHTML = `
+    <div style="display:flex; justify-content:space-between; gap:12px;">
+      <span style="color:#374151;">Total</span>
+      <span style="font-weight:900;">${formatEuroFR(totalVal)}</span>
+    </div>
+    <div style="margin-top:6px; font-weight:900; font-size:15px;">
+      ≈ ${formatEuroFR(per)} <span style="font-weight:700; font-size:14px;">/ personne</span>
+      ${isMobile ? "" : `<span style="font-weight:700; color:#6b7280; font-size:13px;">(pour ${n})</span>`}
+    </div>
+    ${extraHtml}
+  `;
+}
 
     function wire(card) {
       const sel = document.getElementById("participantsSelect");
       if (!sel || sel.dataset.wired) return;
       sel.dataset.wired = "1";
-      sel.addEventListener("change", () => update(card));
+      // sel.addEventListener("change", () => update(card));
+	  sel.addEventListener("change", () => safeUpdate(card));
     }
 
     function attachCardObserver(card) {
       if (cardObs) { try { cardObs.disconnect(); } catch {} }
       observedCard = card;
-      cardObs = new MutationObserver(debounce(() => update(card), 150));
+      // cardObs = new MutationObserver(debounce(() => update(card), 150));
+	  cardObs = new MutationObserver(debounce(() => safeUpdate(card), 150));
       cardObs.observe(card, { childList:true, subtree:true, characterData:true });
     }
 let stableRecap = null;
@@ -493,17 +859,10 @@ function climbToRecapFromButton(btn) {
 
 function findRecapCard() {
   if (isRecapCard(stableRecap)) return stableRecap;
-  
-  
-  
- 
-  // ✅ deep search (shadow dom)
   const cont = deepFindButtonByText("continuer");
   if (cont) {
     const card = climbToRecapFromButton(cont);
     if (card) return (stableRecap = card);
-
-    // ✅ fallback: accepte BODY si on a bien un bouton continuer visible
     stableRecap = document.body;
     return stableRecap;
   }
@@ -562,7 +921,8 @@ function tick() {
 
   if (observedCard !== card) attachCardObserver(card);
 
-  update(card);
+  // update(card);
+  safeUpdate(card);
   startBurst(card, 4500);
 }
 
@@ -571,11 +931,15 @@ let burstTimer = null;
 let inUpdate = false;
 let lastSeenTotal = null;
 
-function safeUpdate(card) {
+
+async function safeUpdate(card) {
   if (inUpdate) return;
   inUpdate = true;
-  try { update(card); }
-  finally { inUpdate = false; }
+  try {
+    await update(card);
+  } finally {
+    inUpdate = false;
+  }
 }
 
 function startBurst(card, durationMs = 8000) {
@@ -682,7 +1046,156 @@ document.addEventListener("click", (e) => {
     scheduleStepperRefresh();
   } catch {}
 }, true);
-	const globalObs = new MutationObserver(debounce((muts) => {
+
+function setParticipantsUI(n) {
+  const v = setParticipants(n);
+  lastParticipants = v;
+
+  const sel = document.getElementById("participantsSelect");
+  if (sel) sel.value = String(v);
+
+  return v;
+}
+function isManualParticipantsSyncActive() {
+  return Date.now() < manualParticipantsSyncUntil;
+}
+
+function lockManualParticipantsSync(participants, ms = 1200) {
+  manualParticipantsWanted = clampN(participants);
+  manualParticipantsSyncUntil = Date.now() + ms;
+  setParticipantsUI(manualParticipantsWanted);
+}
+function freezeParticipantsHint(html, ms = 900) {
+  manualHintText = html || "";
+  manualHintFreezeUntil = Date.now() + ms;
+}
+
+function isParticipantsHintFrozen() {
+  return Date.now() < manualHintFreezeUntil;
+}
+
+document.addEventListener("click", (e) => {
+  try {
+    if (isInPP(e.target)) return;
+    if (extraRuleSyncBusy) return;
+
+    const rule = findExtraPersonRule();
+    if (!rule || !rule.card?.el) return;
+
+    const path = e.composedPath ? e.composedPath() : [];
+    const btn = path.find(n => n && n.tagName && n.tagName.toLowerCase() === "button") || null;
+    if (!btn) return;
+
+    if (!rule.card.el.contains(btn)) return;
+    if (!looksLikePlusMinusButton(btn)) return;
+    if (btn.disabled) return;
+
+    const beforeQty = readOptionQty(rule.card.el);
+
+    const isPlus =
+      (btn.getAttribute("aria-label") || "").trim() === "+" ||
+      (btn.textContent || "").replace(/\s+/g, " ").trim() === "+";
+
+	const predictedQty = isPlus ? (beforeQty + 1) : Math.max(0, beforeQty - 1);
+	const predictedParticipants = (rule.threshold - 1) + predictedQty;
+
+	// fige temporairement le hint pour éviter l’effet de clignotement
+	// freezeParticipantsHint(
+	  // `<span style="color:#6b7280;">Mise à jour du panier en cours…</span>`,
+	  // 900
+	// );
+	const hint = document.getElementById("participantsHint");
+	freezeParticipantsHint(hint?.innerHTML || "", 250);
+	lockManualParticipantsSync(predictedParticipants, 450);
+
+    setTimeout(async () => {
+      try {
+        const freshRule = findExtraPersonRule();
+        if (!freshRule || !freshRule.card?.el) return;
+
+        const changed = await waitForOptionQtyChange(freshRule.card.el, beforeQty, 1200);
+        const afterQty = readOptionQty(freshRule.card.el);
+
+        // si finalement la qty réelle diffère de la prédiction, on corrige
+        if (changed || afterQty !== beforeQty) {
+          const realParticipants = (freshRule.threshold - 1) + afterQty;
+          lockManualParticipantsSync(realParticipants, 900);
+        }
+
+        tick();
+        setTimeout(() => tick(), 80);
+		setTimeout(() => tick(), 180);
+      } catch (err) {
+        console.warn("[pp] reverse sync error", err);
+      }
+    }, 0);
+  } catch (err) {
+    console.warn("[pp] reverse sync click handler error", err);
+  }
+}, true);
+
+
+(function ensureParticipantsMobileCSS() {
+  let st = document.getElementById("participants-mobile-layout-css");
+  if (!st) {
+    st = document.createElement("style");
+    st.id = "participants-mobile-layout-css";
+    document.head.appendChild(st);
+  }
+
+  st.textContent = `
+    @media (max-width: 768px) {
+      #participantsResponsiveRow {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: stretch !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        width: 100% !important;
+      }
+
+      #participantsSelectWrap {
+        flex: 0 0 108px !important;
+        width: 108px !important;
+        min-width: 108px !important;
+        max-width: 108px !important;
+      }
+
+      #participantsHintWrap {
+        flex: 1 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+      }
+
+      #participantsSelect {
+        width: 100% !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        padding: 8px 30px 8px 10px !important;
+        font-size: 16px !important;
+      }
+
+      #participantsHint {
+        padding: 8px 10px !important;
+        font-size: 13px !important;
+        line-height: 1.25 !important;
+        word-break: break-word !important;
+      }
+
+      #participantsHint b {
+        font-size: inherit !important;
+	  }
+	  .participants-extra-mobile-hide {
+	  display: none !important;
+	  }
+	  .participants-count-mobile-hide {
+	  display: none !important;
+	  }
+    }
+  `;
+})();
+const globalObs = new MutationObserver(debounce((muts) => {
+	
 	  if (muts.some(m => m.target?.nodeType === 1 && m.target.closest?.("#participantsBox"))) return;
 	  tick();
 	}, 250));
@@ -1163,26 +1676,18 @@ const LUCKY_CONFIGS = {
 
 
     const DEBUG = false;
-// let __lucky_activityKey = null;
-// let __lucky_lastCtx = "";
-
-// =============================
-// LUCKY: activité (mobile+desktop) - stable & debuggable
-// =============================
-const LUCKY_DEBUG = false; // mets false quand c'est OK
+const LUCKY_DEBUG = false;
 
 function luckyLog(...a){ if (LUCKY_DEBUG) console.log("[lucky]", ...a); }
 
 function getGuidapRoot(){
   return document.getElementById("guidap-popups")
     || document.querySelector("guidap-booking-widget")
-    || null; // ✅ PAS de body
+    || null;
 }
 
 function collectTexts(root){
   const pick = (sel) => Array.from(root.querySelectorAll(sel)).map(n => (n.textContent || "").trim());
-
-  // 1) item sélectionné (quand Guidap marque le choix)
   const selected = pick(
     ".g-item-box.selected .package-item-name-content," +
     ".g-item-box.selected .package-item-name," +
@@ -1191,14 +1696,9 @@ function collectTexts(root){
     "[aria-selected='true'] .package-item-name-content," +
     "[aria-selected='true'] .package-item-name"
   );
-
-  // 2) fallback: tous les noms de packages visibles (utile step 1 mobile)
   const names = pick(".package-item-name-content, .package-item-name");
 
-  // 3) labels/headers de steps (souvent stable mobile)
   const labels = pick(".g-group-field-label, .g-step-page-title, .g-step-page-subtitle");
-
-  // 4) (optionnel) texte global Guidap (pas body entier, sinon bruit “anniversaire” etc)
   const rootText = (root.innerText || root.textContent || "").slice(0, 1200);
 
   return {
@@ -1212,15 +1712,10 @@ function collectTexts(root){
 function detectLuckyActivity(){
   const root = getGuidapRoot();
   const t = collectTexts(root);
-
-  // Important: on met selected en priorité, puis names/labels/rootText
   const txt = [t.selected, t.names, t.labels, t.rootText].filter(Boolean).join(" ");
-
-  // Tab Webflow si présent (desktop parfois)
   const activeTab = document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
   const tab = norm(activeTab);
 
-  // mapping (tu peux affiner)
   if (txt.includes("les tarifs enfants") || txt.includes("anniversaire") || tab.includes("anniversaire") || tab.includes("enfant")) return "enfants";
   if (txt.includes("les tarifs classique") || tab.includes("classique")) return "classique";
   if (txt.includes("evg") || txt.includes("evjf") || tab.includes("evg") || tab.includes("evjf")) return "evg";
@@ -1228,9 +1723,6 @@ function detectLuckyActivity(){
 
   return "default";
 }
-
-// --- anti-flip (stabilisation) ---
-// On n'applique un changement que si on voit le même key 2 fois d'affilée.
 let __lucky_activityKey = null;
 let __lucky_pendingKey = null;
 let __lucky_pendingCount = 0;
@@ -1254,7 +1746,7 @@ function applyLuckyKey(newKey, reason){
 
 function refreshLuckyActivity(reason=""){
   const root = getGuidapRoot();
-  if (!root) return; // ✅ stop total si pas guidap
+  if (!root) return;
 
   const k = detectLuckyActivity();
 
@@ -1274,8 +1766,6 @@ function refreshLuckyActivity(reason=""){
     applyLuckyKey(k, reason);
   }
 }
-
-// Observe guidap-popups (mobile/desktop re-render)
 (function(){
   let mo = null;
   let armedRoot = null;
@@ -1297,15 +1787,12 @@ function refreshLuckyActivity(reason=""){
 
     mo = new MutationObserver(() => refreshLuckyActivity("mutation"));
     mo.observe(root, { childList:true, subtree:true, attributes:true, characterData:true });
-
-    // petit burst quand guidap apparaît
     refreshLuckyActivity("arm0");
     setTimeout(() => refreshLuckyActivity("arm1"), 150);
     setTimeout(() => refreshLuckyActivity("arm2"), 350);
     setTimeout(() => refreshLuckyActivity("arm3"), 800);
   }
 
-  // watcher global léger (détecte apparition/disparition guidap en SPA)
   const global = new MutationObserver(() => {
     if (scanTimer) return;
     scanTimer = setTimeout(() => {
@@ -1314,13 +1801,9 @@ function refreshLuckyActivity(reason=""){
     }, 200);
   });
   global.observe(document.documentElement, { childList:true, subtree:true });
-
-  // resize uniquement si guidap présent
   window.addEventListener("resize", () => {
     if (getGuidapRoot()) refreshLuckyActivity("resize");
   }, { passive:true });
-
-  // SPA hooks (optionnel mais utile)
   window.addEventListener("popstate", arm, { passive:true });
   window.addEventListener("hashchange", arm, { passive:true });
 
@@ -1332,7 +1815,6 @@ function refreshLuckyActivity(reason=""){
     history.replaceState = function(...a){ const r=_rs.apply(this,a); arm(); return r; };
   }
 
-  // boot
   arm();
 })();
 
@@ -1341,12 +1823,7 @@ function getLuckyConfig(){
   return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
 }
 
-    // const norm = (s) =>
-      // (s || "")
-        // .toLowerCase()
-        // .replace(/\s+/g, " ")
-        // .replace(/[’']/g, "'")
-        // .trim();
+
 
     function log(...a){ if (DEBUG) console.log("[lucky]", ...a); }
 	
@@ -1358,116 +1835,6 @@ function isVisible(el){
   return r && r.width > 2 && r.height > 2;
 }
 
-
-/*function getReservationContextText(){
-  const selectors = [
-    ".package-item-name-content",
-    ".g-group-field-label",
-    ".reservation-recap",       
-    ".reservation-recap-mobile",     
-    ".cart-recap-bottom-container",  
-    ".cart-recap-bottom",                  
-    "[class*='recap']",                        
-  ];
-
-  for (const sel of selectors){
-    const nodes = Array.from(document.querySelectorAll(sel)).filter(isVisible);
-    for (const n of nodes){
-      const t = norm(n.innerText || "");
-      if (t.includes("votre réservation") || t.includes("total") || t.includes("nombre de participants")){
-        return t;
-      }
-    }
-  }
-
-  const all = Array.from(document.querySelectorAll("div,section,aside,article")).filter(isVisible);
-  const recap = all.find(el => norm(el.innerText || "").includes("votre réservation"));
-  if (recap) return norm(recap.innerText || "");
-
-  const btn = findCurrentAddToCartButton?.() || findValidateButton?.();
-  if (btn) {
-    const box = btn.closest("div,section,aside,article") || btn.parentElement;
-    if (box) return norm(box.innerText || "");
-  }
-
-  return "";
-}
-	
-function detectLuckyActivity(){
-  const ctx = getReservationContextText();
-  const txt = ctx || norm(document.body?.innerText || ""); 
-  const activeTab =
-    document.querySelector("[data-w-tab].w--current")?.getAttribute("data-w-tab") || "";
-  const tab = norm(activeTab);
-  if (
-    txt.includes("les tarifs enfants") ||
-    txt.includes("anniversaire") ||
-    tab.includes("anniversaire") ||
-    tab.includes("enfant")
-  ) return "enfants";
-
-  if (
-    txt.includes("les tarifs classique") ||
-    tab.includes("classique")
-  ) return "classique";
-
-  if (
-    txt.includes("evg") || txt.includes("evjf") ||
-    tab.includes("evg") || tab.includes("evjf")
-  ) return "evg";
-
-  if (
-    txt.includes("escape game") ||
-    tab.includes("escape")
-  ) return "escape";
-
-  return "default";
-}
-*/
-
-
-// function getLuckyConfig(){
-  // const key = detectLuckyActivity();
-  // return LUCKY_CONFIGS[key] || LUCKY_CONFIGS.default;
-// }	
-	
-/*	
-function getActivityFingerprint(){
-  const ctx = getReservationContextText();
-  const key = detectLuckyActivity();
-  const short = (ctx || "").slice(0, 600);
-  return key + "||" + short;
-}
-
-function maybeResetLuckyOnActivityChange(){
-  const fp = getActivityFingerprint();
-  if (!fp) return;
-
-  if (__lucky_lastCtx !== fp) {
-    __lucky_lastCtx = fp;
-
-    const newKey = detectLuckyActivity();
-    if (newKey !== __lucky_activityKey) {
-      console.log("[lucky] activity changed:", __lucky_activityKey, "->", newKey);
-
-      __lucky_activityKey = newKey;
-
-      window.__lucky_done = false;
-
-      const ov = document.getElementById("luckyOverlay");
-      if (ov) {
-        const cfg = getLuckyConfig();
-        const titleEl = ov.querySelector("#luckyTitle");
-        if (titleEl) titleEl.textContent = cfg.title || "🎁 Tentez votre chance 😉";
-      }
-    }
-  }
-}
-
-setInterval(() => {
-  try { maybeResetLuckyOnActivityChange(); } catch(e){}
-}, 600);	
-*/	
     function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 	function getByXPath(xpath, root = document) {
 	  try {
@@ -1978,10 +2345,10 @@ function drawWheel(ctx, angle, segments, size) {
   const step = (Math.PI * 2) / n;
   winPaletteIdx = 0;
   const greenPalettes = [
-    { inner: "#6ee7a0", outer: "#16a34a" },  // vert moyen
-    { inner: "#86efac", outer: "#22c55e" },  // vert vif
-    { inner: "#4ade80", outer: "#15803d" },  // vert soutenu
-    { inner: "#a7f3c0", outer: "#34d068" },  // vert clair
+    { inner: "#6ee7a0", outer: "#16a34a" },
+    { inner: "#86efac", outer: "#22c55e" },
+    { inner: "#4ade80", outer: "#15803d" }, 
+    { inner: "#a7f3c0", outer: "#34d068" }, 
   ];
 
   function segPalette(label) {
@@ -2152,16 +2519,11 @@ function lightenHex(hex, amt) {
   const b = Math.min(255, (n & 0xff)       + amt);
   return "#" + [r,g,b].map(v => v.toString(16).padStart(2,"0")).join("");
 }
-
-    // ---- wheel spin
     async function spinWheelButAlwaysWin5() {	
       ensureWheelUI();
 		refreshLuckyActivity("before-spin");
 		const cfg = getLuckyConfig();
 		const PROMO_CODE = cfg.promoCode;	  
-	// const cfg = getLuckyConfig();
-	// const PROMO_CODE = cfg.promoCode;
-	// __lucky_activityKey = detectLuckyActivity();
 
       const canvas = document.getElementById("luckyCanvas");
       const ctx = canvas.getContext("2d");
@@ -2315,8 +2677,6 @@ spinBtn.onclick = () => {
     drawWheel(ctx, angle, segments, wheelSize);
 
     if (t < 1) return requestAnimationFrame(frame);
-
-    // fin
     drawWheel(ctx, finalAngle, segments, wheelSize);
 
     window.__lucky_canClose = true;
@@ -2497,19 +2857,54 @@ document.addEventListener("click", async (e) => {
   })();
   
 
-
 (function(){
-  const GOOGLE_RATING = 5.0;
-  const GOOGLE_REVIEWS = 344;
-  const GOOGLE_URL = "https://maps.app.goo.gl/GqzHp8pXdzDmn9NW6";
+  const norm = window.__ug_norm || function (s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[’']/g, "'")
+      .trim();
+  };
 
- const norm = window.__ug_norm;
+  const GOOGLE_ZONE_CONFIG = {
+    landes: {
+      label: "Google",
+      url: "https://maps.app.goo.gl/TON-LIEN-LANDES",
+      rating: 4.9,
+      reviews: 128
+    },
+    pau: {
+      label: "Google",
+      url: "https://maps.app.goo.gl/TON-LIEN-PAU",
+      rating: 4.8,
+      reviews: 86
+    },
+    bordeaux: {
+      label: "Google",
+      url: "https://maps.app.goo.gl/TON-LIEN-BORDEAUX",
+      rating: 5.0,
+      reviews: 214
+    },
+    default: {
+      label: "Google",
+      url: "https://maps.app.goo.gl/TON-LIEN-DEFAULT",
+      rating: 5.0,
+      reviews: 100
+    }
+  };
+
+  const DEBUG_GOOGLE_ZONE = false;
+
+  function gLog(...a){
+    if (DEBUG_GOOGLE_ZONE) console.log("[google-zone]", ...a);
+  }
+
   function isVisible(el){
-    if(!el) return false;
+    if (!el) return false;
     const cs = getComputedStyle(el);
-    if(cs.display==="none" || cs.visibility==="hidden" || cs.opacity==="0") return false;
+    if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return false;
     const r = el.getBoundingClientRect?.();
-    return r && r.width>2 && r.height>2;
+    return !!(r && r.width > 2 && r.height > 2);
   }
 
   function findValidateButton(){
@@ -2525,7 +2920,9 @@ document.addEventListener("click", async (e) => {
     const star = (fill) => `
       <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="display:block">
         <path fill="${fill}" d="M12 17.27l5.18 3.04-1.64-5.81L20 9.24l-5.9-.5L12 3.5 9.9 8.74 4 9.24l4.46 5.22-1.64 5.81z"/>
-      </svg>`;
+      </svg>
+    `;
+
     const halfStar = (gid) => `
       <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="display:block">
         <defs>
@@ -2535,61 +2932,142 @@ document.addEventListener("click", async (e) => {
           </linearGradient>
         </defs>
         <path fill="url(#${gid})" d="M12 17.27l5.18 3.04-1.64-5.81L20 9.24l-5.9-.5L12 3.5 9.9 8.74 4 9.24l4.46 5.22-1.64 5.81z"/>
-      </svg>`;
+      </svg>
+    `;
 
     const gid = "halfGrad_" + Math.random().toString(36).slice(2);
+
     let html = "";
-    for(let i=0;i<full;i++) html += star("#FBBF24");
-    if(half) html += halfStar(gid);
-    for(let i=0;i<empty;i++) html += star("#E5E7EB");
+    for (let i = 0; i < full; i++) html += star("#FBBF24");
+    if (half) html += halfStar(gid);
+    for (let i = 0; i < empty; i++) html += star("#E5E7EB");
     return html;
+  }
+
+  function detectZone() {
+    const priorityNodes = [
+      ...document.querySelectorAll(".experience-cart-card-activity"),
+      ...document.querySelectorAll(".activity-card-title"),
+      ...document.querySelectorAll(".package-item-name-content"),
+      ...document.querySelectorAll(".package-item-name"),
+      ...document.querySelectorAll(".g-group-field-label"),
+      ...document.querySelectorAll(".g-step-page-title"),
+      ...document.querySelectorAll(".g-step-page-subtitle"),
+      document.querySelector("[data-w-tab].w--current")
+    ].filter(Boolean);
+
+    const seen = [];
+
+    for (const el of priorityNodes) {
+      const txt = norm(el.textContent || "");
+      if (!txt) continue;
+      seen.push(txt);
+
+      if (txt.includes("landes")) {
+        gLog("zone=landes via", txt);
+        return "landes";
+      }
+      if (txt.includes("pau")) {
+        gLog("zone=pau via", txt);
+        return "pau";
+      }
+      if (txt.includes("bordeaux")) {
+        gLog("zone=bordeaux via", txt);
+        return "bordeaux";
+      }
+    }
+
+    const fallback = norm(document.body?.innerText || "");
+    if (fallback.includes("landes")) return "landes";
+    if (fallback.includes("pau")) return "pau";
+    if (fallback.includes("bordeaux")) return "bordeaux";
+
+    gLog("zone=default", seen);
+    return "default";
+  }
+
+  function buildBlockHtml(cfg){
+    return `
+      <span style="font-weight:800; color:inherit; pointer-events:none;">${cfg.label || "Google"}</span>
+      <span style="display:flex; gap:2px; align-items:center; transform:translateY(0.5px); pointer-events:none;">
+        ${starsSVG(Number(cfg.rating || 5))}
+      </span>
+      <span style="font-weight:900; color:inherit; pointer-events:none;">
+        ${Number(cfg.rating || 5).toFixed(1).replace(".", ",")}
+      </span>
+      <span style="color:inherit; pointer-events:none;">
+        (${Number(cfg.reviews || 0).toLocaleString("fr-FR")} avis)
+      </span>
+    `;
   }
 
   function mount(){
     const btn = findValidateButton();
-    if(!btn) return;
-    if(document.getElementById("googleReviewsBlock")) return;
+    if (!btn) return;
 
-    const wrap = document.createElement("a");
-    wrap.id = "googleReviewsBlock";
-    wrap.href = GOOGLE_URL;
-    wrap.target = "_blank";
-    wrap.rel = "noopener";
-	wrap.style.cssText = `
-	  display:flex;
-	  justify-content:center;
-	  align-items:center;
-	  gap:8px;
-	  margin-top:10px;
-	  width:100%;
-	  text-decoration:none;
-	  color:#6b7280;
-	  font-size:14px;
-	  line-height:1.2;
-	  user-select:none;
-	`;
+    const zone = detectZone();
+    const cfg = GOOGLE_ZONE_CONFIG[zone] || GOOGLE_ZONE_CONFIG.default;
 
-    wrap.onmouseenter = () => { wrap.style.color = "#374151"; };
-    wrap.onmouseleave = () => { wrap.style.color = "#6b7280"; };
+    let wrap = document.getElementById("googleReviewsBlock");
 
-    wrap.innerHTML = `
-      <span style="font-weight:800; color:inherit;">Google</span>
-      <span style="display:flex; gap:2px; align-items:center; transform:translateY(0.5px);">
-        ${starsSVG(GOOGLE_RATING)}
-      </span>
-      <span style="font-weight:900; color:inherit;">
-        ${GOOGLE_RATING.toFixed(1).replace(".", ",")}
-      </span>
-      <span style="color:inherit;">
-        (${GOOGLE_REVIEWS.toLocaleString("fr-FR")} avis)
-      </span>
-    `;
-    btn.insertAdjacentElement("afterend", wrap);
+    if (!wrap) {
+      wrap = document.createElement("a");
+      wrap.id = "googleReviewsBlock";
+      wrap.target = "_blank";
+      wrap.rel = "noopener noreferrer";
+      wrap.style.cssText = `
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        gap:8px;
+        margin-top:10px;
+        width:100%;
+        min-height:38px;
+        text-decoration:none;
+        color:#6b7280;
+        font-size:14px;
+        line-height:1.2;
+        user-select:none;
+        cursor:pointer;
+        position:relative;
+        z-index:20;
+        pointer-events:auto;
+        box-sizing:border-box;
+      `;
+
+      wrap.onmouseenter = () => { wrap.style.color = "#374151"; };
+      wrap.onmouseleave = () => { wrap.style.color = "#6b7280"; };
+
+      btn.insertAdjacentElement("afterend", wrap);
+    } else if (wrap.previousElementSibling !== btn) {
+      btn.insertAdjacentElement("afterend", wrap);
+    }
+
+    wrap.href = cfg.url || "#";
+    wrap.innerHTML = buildBlockHtml(cfg);
   }
 
-  const obs = new MutationObserver(() => mount());
-  obs.observe(document.documentElement, {childList:true, subtree:true});
+  let scheduled = false;
+  function scheduleMount(){
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      mount();
+    });
+  }
+
+  const obs = new MutationObserver(scheduleMount);
+  obs.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+
+  mount();
+  setTimeout(mount, 200);
   setTimeout(mount, 800);
+  setTimeout(mount, 1500);
 })();
 
 
@@ -2598,24 +3076,27 @@ document.addEventListener("click", async (e) => {
   function apply(){
     const wrap = document.querySelector(".cart-recap-bottom-columns.columns.is-mobile");
     if(!wrap) return;
+
     const firstCol = wrap.querySelector(":scope > .column:first-child");
     if(firstCol) firstCol.style.display = "none";
+
     wrap.style.display = "flex";
-    wrap.style.justifyContent = "center";
+    wrap.style.justifyContent = "stretch";
     wrap.style.alignItems = "stretch";
+    wrap.style.width = "100%";
+
     const visibleCols = Array.from(wrap.querySelectorAll(":scope > .column"))
       .filter(c => c !== firstCol && getComputedStyle(c).display !== "none");
-    if(visibleCols.length === 1){
-      const col = visibleCols[0];
-      col.style.flex = "0 1 auto";
-      col.style.maxWidth = "100%";
-      col.style.textAlign = "center";
-    } else {
-      visibleCols.forEach(col => {
-        col.style.flex = "0 1 auto";
-        col.style.maxWidth = "100%";
-      });
-    }
+
+    visibleCols.forEach(col => {
+      col.style.flex = "1 1 100%";
+      col.style.width = "100%";
+      col.style.maxWidth = "none";
+      col.style.minWidth = "0";
+      col.style.textAlign = "left";
+      col.style.margin = "0";
+	  // col.style.overflowY = "auto";
+    });
   }
 
   let scheduled = false;
@@ -2639,24 +3120,27 @@ document.addEventListener("click", async (e) => {
   function apply(){
     const wrap = document.querySelector(".reservation-recap-mobile.columns.is-mobile");
     if(!wrap) return;
+
     const firstCol = wrap.querySelector(":scope > .column:first-child");
     if(firstCol) firstCol.style.display = "none";
+
     wrap.style.display = "flex";
-    wrap.style.justifyContent = "center";
+    wrap.style.justifyContent = "stretch";
     wrap.style.alignItems = "stretch";
+    wrap.style.width = "100%";
+
     const visibleCols = Array.from(wrap.querySelectorAll(":scope > .column"))
       .filter(c => c !== firstCol && getComputedStyle(c).display !== "none");
-    if(visibleCols.length === 1){
-      const col = visibleCols[0];
-      col.style.flex = "0 1 auto";
-      col.style.maxWidth = "100%";
-      col.style.textAlign = "center";
-    } else {
-      visibleCols.forEach(col => {
-        col.style.flex = "0 1 auto";
-        col.style.maxWidth = "100%";
-      });
-    }
+
+    visibleCols.forEach(col => {
+      col.style.flex = "1 1 100%";
+      col.style.width = "100%";
+      col.style.maxWidth = "none";
+      col.style.minWidth = "0";
+      col.style.textAlign = "left";
+      col.style.margin = "0";
+	  // col.style.overflowY = "auto";
+    });
   }
 
   let scheduled = false;
@@ -2868,8 +3352,6 @@ const norm = window.__ug_norm;
       }
     });
   }
-
-  // throttle
   let scheduled = false;
   function schedule(){
     if (scheduled) return;
@@ -2879,7 +3361,7 @@ const norm = window.__ug_norm;
 
   apply();
   const obs = new MutationObserver(schedule);
-  obs.observe(document.documentElement, { childList:true, subtree:true }); // ✅ pas attributes
+  obs.observe(document.documentElement, { childList:true, subtree:true });
 
   setTimeout(apply, 200);
   setTimeout(apply, 700);
@@ -2893,12 +3375,12 @@ const norm = window.__ug_norm;
   .gdp-scoped-ui .activity-info-reservation,
   .gdp-scoped-ui .cart-recap-bottom{
     overflow-x: scroll !important;
-    height: 275px !important;
+    height: 190px !important;
     overflow-y: hidden !important;
   }
 
   .gdp-scoped-ui .g-step-page-content {
-    margin-bottom: 200px !important;
+    margin-bottom: 115px !important;
   }
 
   .gdp-scoped-ui .step-cart-recap{
