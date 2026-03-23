@@ -47,7 +47,7 @@ function getOptionsFingerprint() {
 
 function autoSelectFirstTariffIfNeeded() {
   if (!isChooseActivityStep()) return false;
-  if (shouldSkipAutoFirstTariff()) return false;
+  // if (shouldSkipAutoFirstTariff()) return false;
 
   const cards = getOptionCards().map(readOptionMeta).filter(Boolean);
   if (!cards.length) return false;
@@ -1116,7 +1116,7 @@ function getFirstOptionMeta() {
 document.addEventListener("click", (e) => {
   try {
     if (!isChooseActivityStep()) return;
-	if (shouldSkipAutoFirstTariff()) return;
+	// if (shouldSkipAutoFirstTariff()) return;
     if (extraRuleSyncBusy) return;
 
     const first = getFirstOptionMeta();
