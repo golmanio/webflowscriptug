@@ -5,6 +5,25 @@ window.__ug_norm = window.__ug_norm || function (s) {
     .replace(/[’']/g, "'")
     .trim();
 };
+
+window.__ug_isMobileCartStep = window.__ug_isMobileCartStep || function () {
+  const norm = window.__ug_norm || function (s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[’']/g, "'")
+      .trim();
+  };
+
+  const txt = norm(document.body?.innerText || "");
+  return (
+    window.innerWidth <= 768 &&
+    txt.includes("finalisez votre commande") &&
+    txt.includes("votre panier") &&
+    txt.includes("valider le panier")
+  );
+};
+
   (function () {
     const DEBUG = false;
 
@@ -14,8 +33,8 @@ window.__ug_norm = window.__ug_norm || function (s) {
       let t;
       return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
     };
-const MIN_PARTICIPANTS = 6;
-const MAX_PARTICIPANTS = 40;
+const FALLBACK_MIN_PARTICIPANTS = 6;
+const FALLBACK_MAX_PARTICIPANTS = 40;
 const LS_KEY = "unigames_participants";
 const DEFAULT_PARTICIPANTS = 10;
 
@@ -28,6 +47,185 @@ function shouldSkipAutoFirstTariff() {
   const txt = norm(document.body?.innerText || "");
   return txt.includes("bordeaux - les tarifs classique");
 }
+
+
+function isManagedBookingStepForHint() {
+  const txt = norm(document.body?.innerText || "");
+  return (
+    txt.includes("choisissez votre activité") ||
+    txt.includes("personnalisez votre activité") ||
+    txt.includes("sélectionnez vos dates et heures")
+  );
+}
+
+function getRecapTitleSubtitleText() {
+  const right = document.querySelector(".guidap-split-layout-right");
+  if (!right) return "";
+
+  const title = right.querySelector(".reservation-recap-desktop-title")?.textContent || "";
+  const subtitle = right.querySelector(".reservation-recap-desktop-subtitle")?.textContent || "";
+
+  return norm(`${title} ${subtitle}`);
+}
+
+function getSelectedPackageNameForHint() {
+  const left = document.querySelector(".guidap-split-layout-left");
+  if (!left) return "";
+
+  const selected =
+    left.querySelector(".package-field .g-item-box.selected .package-item-name-content") ||
+    left.querySelector(".package-field .g-item-box.selected .package-item-name") ||
+    left.querySelector(".package-field .g-item.selected .package-item-name-content") ||
+    left.querySelector(".package-field .g-item.selected .package-item-name") ||
+    left.querySelector(".package-field [aria-selected='true'] .package-item-name-content") ||
+    left.querySelector(".package-field [aria-selected='true'] .package-item-name");
+
+  return norm(selected?.textContent || "");
+}
+
+function shouldHideFromTextForHint(text) {
+  const t = norm(text);
+  if (!t) return false;
+
+  return [
+    "les tarifs classique",
+    "animation escape game",
+    "murder party",
+    "qui à tué berlin",
+    "evg",
+    "evjf",
+    "formule 30 mn d'un unigames",
+    "formule 1h d'un unigames",
+    "pack multi unigames 1h30",
+    "pack multi unigames 2h",
+    "pack aventure 1h30",
+    "pack de folie 2h",
+    "pack unigames 2h",
+    "pack unigames 1h30",
+    "1h d'un unigames",
+    "30 minutes d'un unigames"
+  ].some(keyword => t.includes(keyword));
+}
+
+function shouldHideTotalInParticipantsHint() {
+  if (!isManagedBookingStepForHint()) return false;
+
+  const recapText = getRecapTitleSubtitleText();
+  const selectedPackage = getSelectedPackageNameForHint();
+
+  return (
+    shouldHideFromTextForHint(recapText) ||
+    shouldHideFromTextForHint(selectedPackage)
+  );
+}
+
+
+function getSelectedPackageNameRaw() {
+  const left = document.querySelector(".guidap-split-layout-left");
+  if (!left) return "";
+
+  const selected =
+    left.querySelector(".package-field .g-item-box.selected .package-item-name-content") ||
+    left.querySelector(".package-field .g-item-box.selected .package-item-name") ||
+    left.querySelector(".package-field .g-item.selected .package-item-name-content") ||
+    left.querySelector(".package-field .g-item.selected .package-item-name") ||
+    left.querySelector(".package-field [aria-selected='true'] .package-item-name-content") ||
+    left.querySelector(".package-field [aria-selected='true'] .package-item-name");
+
+  return norm(selected?.textContent || "");
+}
+
+function getRecapSubtitleRaw() {
+  const right = document.querySelector(".guidap-split-layout-right");
+  if (!right) return "";
+  return norm(right.querySelector(".reservation-recap-desktop-subtitle")?.textContent || "");
+}
+
+function getParticipantsRangeForCurrentActivity() {
+  const selectedPackage = getSelectedPackageNameRaw();
+  const recapSubtitle = getRecapSubtitleRaw();
+  const recapText = getRecapTitleSubtitleText();
+
+  const txt = norm(`${selectedPackage} ${recapSubtitle} ${recapText}`);
+
+  // Murder Party : 10 à 60
+  if (txt.includes("murder party")) {
+    return { min: 10, max: 60, def: 10 };
+  }
+
+  // Animation Escape Game : 6 à 16
+  if (txt.includes("animation escape game")) {
+    return { min: 6, max: 16, def: 6 };
+  }
+
+  // Anniversaire : 6 à 12
+  if (
+    txt.includes("anniversaire") ||
+    txt.includes("les tarifs enfants")
+  ) {
+    return { min: 6, max: 12, def: 6 };
+  }
+
+  // Classique / EVG / EVJF : 6 à 30
+  if (
+    txt.includes("les tarifs classique") ||
+    txt.includes("evg") ||
+    txt.includes("evjf") ||
+    txt.includes("formule 30 mn d'un unigames") ||
+    txt.includes("formule 1h d'un unigames") ||
+    txt.includes("pack multi unigames 1h30") ||
+    txt.includes("pack multi unigames 2h") ||
+    txt.includes("pack aventure 1h30") ||
+    txt.includes("pack de folie 2h") ||
+    txt.includes("pack unigames 1h30") ||
+    txt.includes("pack unigames 2h")
+  ) {
+    return { min: 6, max: 30, def: 6 };
+  }
+
+  // Location malle Escape Game : 6 à 40
+  if (txt.includes("location d'une malle escape game")) {
+    return { min: 6, max: 40, def: 6 };
+  }
+
+  return {
+    min: FALLBACK_MIN_PARTICIPANTS,
+    max: FALLBACK_MAX_PARTICIPANTS,
+    def: DEFAULT_PARTICIPANTS
+  };
+}
+
+function clampParticipantsForCurrentActivity(n) {
+  const range = getParticipantsRangeForCurrentActivity();
+  n = parseInt(n, 10);
+  if (!Number.isFinite(n)) n = range.def;
+  return Math.min(range.max, Math.max(range.min, n));
+}
+
+function rebuildParticipantsSelect() {
+  const sel = document.getElementById("participantsSelect");
+  if (!sel) return;
+
+  const range = getParticipantsRangeForCurrentActivity();
+  const current = clampParticipantsForCurrentActivity(getParticipants());
+
+  const wantedHtml = Array.from(
+    { length: range.max - range.min + 1 },
+    (_, i) => {
+      const n = range.min + i;
+      return `<option value="${n}">${n}</option>`;
+    }
+  ).join("");
+
+  if (sel.innerHTML !== wantedHtml) {
+    sel.innerHTML = wantedHtml;
+  }
+
+  lastParticipants = current;
+  localStorage.setItem(LS_KEY, String(current));
+  sel.value = String(current);
+}
+
 
 function isChooseActivityStep() {
   const txt = norm(document.body?.innerText || "");
@@ -119,17 +317,18 @@ function deepFindButtonByText(label) {
 
 
 function clampN(n){
-  n = parseInt(n, 10);
-  if (!Number.isFinite(n)) n = DEFAULT_PARTICIPANTS;
-  return Math.min(MAX_PARTICIPANTS, Math.max(MIN_PARTICIPANTS, n));
+  return clampParticipantsForCurrentActivity(n);
 }
 
 function getParticipants(){
   const raw = localStorage.getItem(LS_KEY);
+  const range = getParticipantsRangeForCurrentActivity();
+
   if (raw === null || raw === undefined || raw === "") {
-    localStorage.setItem(LS_KEY, String(DEFAULT_PARTICIPANTS));
-    return DEFAULT_PARTICIPANTS;
+    localStorage.setItem(LS_KEY, String(range.def));
+    return range.def;
   }
+
   const v = clampN(raw);
   if (String(v) !== String(raw)) localStorage.setItem(LS_KEY, String(v));
   return v;
@@ -534,7 +733,13 @@ function ensureBox(card) {
 		<div id="participantsSelectWrap" style="width:100%;">
 		  <select id="participantsSelect"
 			style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; font-size:14px;">
-			${Array.from({ length: (MAX_PARTICIPANTS - MIN_PARTICIPANTS + 1) }, (_, i) => i + MIN_PARTICIPANTS).map(n => `<option value="${n}">${n}</option>`).join("")}
+			${(() => {
+			  const range = getParticipantsRangeForCurrentActivity();
+			  return Array.from(
+				{ length: range.max - range.min + 1 },
+				(_, i) => range.min + i
+			  ).map(n => `<option value="${n}">${n}</option>`).join("");
+			})()}
 		  </select>
 		</div>
 
@@ -862,22 +1067,35 @@ async function update(card) {
 
   const per = totalVal / n;
 
-  let extraHtml = "";
-  const freshRule = findExtraPersonRule();
-  const isMobile = window.innerWidth <= 768;
+const hideTotalInHint = shouldHideTotalInParticipantsHint();
 
-  if (freshRule && !isMobile) {
-    const extraQty = readOptionQty(freshRule.card.el);
-    if (extraQty > 0) {
-      extraHtml = `
-        <div style="margin-top:8px; padding-top:8px; border-top:1px solid #e5e7eb; color:#374151; font-size:13px; line-height:1.35;">
-          À partir de <b>${freshRule.threshold}</b> participants: <b>tarif par personne</b><br>
-          <b>${extraQty}</b> Participant(s) supplémentaire(s) : <b>${extraQty}</b> × ${formatEuroFR(freshRule.pricePerPerson)}
-        </div>
-      `;
-    }
+let extraHtml = "";
+const freshRule = findExtraPersonRule();
+const isMobile = window.innerWidth <= 768;
+
+if (!hideTotalInHint && freshRule && !isMobile) {
+  const extraQty = readOptionQty(freshRule.card.el);
+  if (extraQty > 0) {
+    extraHtml = `
+      <div style="margin-top:8px; padding-top:8px; border-top:1px solid #e5e7eb; color:#374151; font-size:13px; line-height:1.35;">
+        À partir de <b>${freshRule.threshold}</b> participants: <b>tarif par personne</b><br>
+        <b>${extraQty}</b> Participant(s) supplémentaire(s) : <b>${extraQty}</b> × ${formatEuroFR(freshRule.pricePerPerson)}
+      </div>
+    `;
   }
+}
 
+
+
+if (hideTotalInHint) {
+  hint.innerHTML = `
+    <div style="font-weight:900; font-size:15px;">
+      ≈ ${formatEuroFR(per)} <span style="font-weight:700; font-size:14px;">/ personne</span>
+      ${isMobile ? "" : `<span style="font-weight:700; color:#6b7280; font-size:13px;">(pour ${n})</span>`}
+    </div>
+    ${extraHtml}
+  `;
+} else {
   hint.innerHTML = `
     <div style="display:flex; justify-content:space-between; gap:12px;">
       <span style="color:#374151;">Total</span>
@@ -889,6 +1107,7 @@ async function update(card) {
     </div>
     ${extraHtml}
   `;
+}
 }
 
     function wire(card) {
@@ -1005,6 +1224,7 @@ function tick() {
 
   
   if (!ensureBox(card)) return;
+  rebuildParticipantsSelect();
   syncParticipantsSelectState();
   wire(card);
 
@@ -1371,6 +1591,7 @@ const globalObs = new MutationObserver(debounce((muts) => {
 
 
 (function(){
+  const isMobileCartStep = window.__ug_isMobileCartStep;
   const norm = window.__ug_norm;
   function isVisible(el){
     if(!el) return false;
@@ -1391,7 +1612,7 @@ function isFinalPage(){
 }
 
 function cleanupIfNotFinal(){
-  if (isFinalPage()) return;
+  if (isFinalPage() && !isMobileCartStep()) return;
   document.getElementById("payChoiceNote2")?.remove();
   lastMarkerAnchor = null;
   lastNoteAnchor = null;
@@ -1429,8 +1650,9 @@ function ensureNote(){
 }
 
 function mount(){
-	cleanupIfNotFinal();
-    if(!isFinalPage()) return;
+  cleanupIfNotFinal();
+  if(!isFinalPage()) return;
+  if (isMobileCartStep()) return;
 
   const btn = findValidateButton();
   if(btn && btn.parentElement){
@@ -1462,7 +1684,7 @@ function mount(){
 (function(){
 
 
-
+  const isMobileCartStep = window.__ug_isMobileCartStep;
 
 
 
@@ -1485,7 +1707,7 @@ function isFinalPage(){
 }
 
 function cleanupIfNotFinal(){
-  if (isFinalPage()) return;
+  if (isFinalPage() && !isMobileCartStep()) return;
   document.getElementById("payChoiceNote0")?.remove();
   lastMarkerAnchor = null;
   lastNoteAnchor = null;
@@ -1561,8 +1783,9 @@ function ensureNote(){
 }
 
 function mount(){
-	cleanupIfNotFinal();
-    if(!isFinalPage()) return;
+  cleanupIfNotFinal();
+  if(!isFinalPage()) return;
+  if (isMobileCartStep()) return;
 
   const btn = findValidateButton();
   if(btn && btn.parentElement){
@@ -1593,6 +1816,7 @@ function mount(){
 
 
 (function(){
+	const isMobileCartStep = window.__ug_isMobileCartStep;
   const NOTE_TEXT = "(1) Paiement au choix : acompte de 50 € ou totalité.";
 
   const norm = window.__ug_norm;
@@ -1616,9 +1840,8 @@ function isFinalPage(){
 }
 
 function cleanupIfNotFinal(){
-  if (isFinalPage()) return;
+  if (isFinalPage() && !isMobileCartStep()) return;
   document.querySelectorAll("#payChoiceMarker").forEach(n => n.remove());
-
   document.getElementById("payChoiceNote")?.remove();
   lastMarkerAnchor = null;
   lastNoteAnchor = null;
@@ -1695,8 +1918,9 @@ function ensureNote(){
 }
 
 function mount(){
-	cleanupIfNotFinal();
+  cleanupIfNotFinal();
   if(!isFinalPage()) return;
+  if (isMobileCartStep()) return;
 
   const amountEl = findTotalAmountEl();
   if(amountEl){
@@ -3012,6 +3236,7 @@ document.addEventListener("click", async (e) => {
   
 
 (function(){
+	const isMobileCartStep = window.__ug_isMobileCartStep;
   const norm = window.__ug_norm || function (s) {
     return (s || "")
       .toLowerCase()
@@ -3155,51 +3380,56 @@ document.addEventListener("click", async (e) => {
     `;
   }
 
-  function mount(){
-    const btn = findValidateButton();
-    if (!btn) return;
-
-    const zone = detectZone();
-    const cfg = GOOGLE_ZONE_CONFIG[zone] || GOOGLE_ZONE_CONFIG.default;
-
-    let wrap = document.getElementById("googleReviewsBlock");
-
-    if (!wrap) {
-      wrap = document.createElement("a");
-      wrap.id = "googleReviewsBlock";
-      wrap.target = "_blank";
-      wrap.rel = "noopener noreferrer";
-      wrap.style.cssText = `
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        gap:8px;
-        margin-top:10px;
-        width:100%;
-        min-height:38px;
-        text-decoration:none;
-        color:#6b7280;
-        font-size:14px;
-        line-height:1.2;
-        user-select:none;
-        cursor:pointer;
-        position:relative;
-        z-index:20;
-        pointer-events:auto;
-        box-sizing:border-box;
-      `;
-
-      wrap.onmouseenter = () => { wrap.style.color = "#374151"; };
-      wrap.onmouseleave = () => { wrap.style.color = "#6b7280"; };
-
-      btn.insertAdjacentElement("afterend", wrap);
-    } else if (wrap.previousElementSibling !== btn) {
-      btn.insertAdjacentElement("afterend", wrap);
-    }
-
-    wrap.href = cfg.url || "#";
-    wrap.innerHTML = buildBlockHtml(cfg);
+function mount(){
+  if (isMobileCartStep()) {
+    document.getElementById("googleReviewsBlock")?.remove();
+    return;
   }
+
+  const btn = findValidateButton();
+  if (!btn) return;
+
+  const zone = detectZone();
+  const cfg = GOOGLE_ZONE_CONFIG[zone] || GOOGLE_ZONE_CONFIG.default;
+
+  let wrap = document.getElementById("googleReviewsBlock");
+
+  if (!wrap) {
+    wrap = document.createElement("a");
+    wrap.id = "googleReviewsBlock";
+    wrap.target = "_blank";
+    wrap.rel = "noopener noreferrer";
+    wrap.style.cssText = `
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+      margin-top:10px;
+      width:100%;
+      min-height:38px;
+      text-decoration:none;
+      color:#6b7280;
+      font-size:14px;
+      line-height:1.2;
+      user-select:none;
+      cursor:pointer;
+      position:relative;
+      z-index:20;
+      pointer-events:auto;
+      box-sizing:border-box;
+    `;
+
+    wrap.onmouseenter = () => { wrap.style.color = "#374151"; };
+    wrap.onmouseleave = () => { wrap.style.color = "#6b7280"; };
+
+    btn.insertAdjacentElement("afterend", wrap);
+  } else if (wrap.previousElementSibling !== btn) {
+    btn.insertAdjacentElement("afterend", wrap);
+  }
+
+  wrap.href = cfg.url || "#";
+  wrap.innerHTML = buildBlockHtml(cfg);
+}
 
   let scheduled = false;
   function scheduleMount(){
@@ -3529,19 +3759,30 @@ const norm = window.__ug_norm;
   .gdp-scoped-ui .activity-info-reservation,
   .gdp-scoped-ui .cart-recap-bottom{
     overflow-x: scroll !important;
-    height: 190px !important;
-    overflow-y: hidden !important;
+    min-height: 190px !important;
+    height: auto !important;
+    overflow-y: visible !important;
   }
 
   .gdp-scoped-ui .g-step-page-content {
-    margin-bottom: 115px !important;
+    margin-bottom: 145px !important;
   }
 
   .gdp-scoped-ui .step-cart-recap{
-    margin-bottom: 170px !important;
+    margin-bottom: 210px !important;
   }
 
-  /* overflow: visible !important; */
+  #payChoiceNoteMobileCart{
+    display:block !important;
+    margin-top:6px !important;
+    margin-bottom:2px !important;
+    font-size:12.5px !important;
+    color:#4b5563 !important;
+    opacity:.95 !important;
+    line-height:1.2 !important;
+    text-align:center !important;
+    padding:0 10px !important;
+  }
 }
   `;
 
@@ -3552,4 +3793,335 @@ const norm = window.__ug_norm;
     document.head.appendChild(st);
   }
   st.textContent = css;
+})();
+
+//NEW HIDE POUR LES ACTIVITé A PRIX PAR PERSONNE
+(function () {
+  const DEBUG_HIDE_AMOUNTS = false;
+
+  const norm = window.__ug_norm || function (s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[’']/g, "'")
+      .trim();
+  };
+
+  function dlog(...args) {
+    if (DEBUG_HIDE_AMOUNTS) console.log("[hide-amounts]", ...args);
+  }
+
+  function ensureStyle() {
+    let st = document.getElementById("ug-hide-reservation-amounts-style");
+    if (!st) {
+      st = document.createElement("style");
+      st.id = "ug-hide-reservation-amounts-style";
+      document.head.appendChild(st);
+    }
+
+    st.textContent = `
+      .ug-hide-reservation-amount {
+        display: none !important;
+      }
+    `;
+  }
+
+  function isManagedBookingStep() {
+    const txt = norm(document.body?.innerText || "");
+
+    return (
+      txt.includes("choisissez votre activité") ||
+      txt.includes("personnalisez votre activité") ||
+      txt.includes("sélectionnez vos dates et heures")
+    );
+  }
+
+  function getRightPanel() {
+    return document.querySelector(".guidap-split-layout-right");
+  }
+
+  function getReservationRecapTexts() {
+    const right = getRightPanel();
+    if (!right) return { title: "", subtitle: "", full: "" };
+
+    const title = norm(
+      right.querySelector(".reservation-recap-desktop-title")?.textContent || ""
+    );
+
+    const subtitle = norm(
+      right.querySelector(".reservation-recap-desktop-subtitle")?.textContent || ""
+    );
+
+    return {
+      title,
+      subtitle,
+      full: `${title} ${subtitle}`.trim()
+    };
+  }
+
+  function getSelectedPackageName() {
+    const left = document.querySelector(".guidap-split-layout-left");
+    if (!left) return "";
+
+    const selected =
+      left.querySelector(".package-field .g-item-box.selected .package-item-name-content") ||
+      left.querySelector(".package-field .g-item-box.selected .package-item-name") ||
+      left.querySelector(".package-field .g-item.selected .package-item-name-content") ||
+      left.querySelector(".package-field .g-item.selected .package-item-name") ||
+      left.querySelector(".package-field [aria-selected='true'] .package-item-name-content") ||
+      left.querySelector(".package-field [aria-selected='true'] .package-item-name");
+
+    return norm(selected?.textContent || "");
+  }
+
+  function shouldHideFromText(text) {
+    const t = norm(text);
+
+    if (!t) return false;
+
+    return [
+      "les tarifs classique",
+      "animation escape game",
+      "murder party",
+      "qui à tué berlin",
+      "evg",
+      "evjf",
+      "formule 30 mn d'un unigames",
+      "formule 1h d'un unigames",
+      "pack multi unigames 1h30",
+      "pack multi unigames 2h",
+      "pack aventure 1h30",
+      "pack de folie 2h",
+	  "pack unigames 2h",
+	  "pack unigames 2h",
+	  "pack unigames 1h30",
+	  "1h d'un unigames",
+	  "30 minutes d'un unigames",
+    ].some(keyword => t.includes(keyword));
+  }
+
+  function shouldHideReservationAmounts() {
+    const { title, subtitle, full } = getReservationRecapTexts();
+    const selectedPackageName = getSelectedPackageName();
+
+    const hide =
+      shouldHideFromText(title) ||
+      shouldHideFromText(subtitle) ||
+      shouldHideFromText(full) ||
+      shouldHideFromText(selectedPackageName);
+
+    dlog("title =", title);
+    dlog("subtitle =", subtitle);
+    dlog("full =", full);
+    dlog("selectedPackageName =", selectedPackageName);
+    dlog("shouldHideReservationAmounts =", hide);
+
+    return hide;
+  }
+
+  function clearHiddenMarkers() {
+    document.querySelectorAll(".ug-hide-reservation-amount").forEach(el => {
+      el.classList.remove("ug-hide-reservation-amount");
+    });
+  }
+
+  function getNodeToHide(el) {
+    if (!el) return null;
+    return el.closest("div,span,p,strong,b") || el;
+  }
+
+  function getRightReservationAmountNodes() {
+    const right = getRightPanel();
+    if (!right) return [];
+
+    const nodes = Array.from(
+      right.querySelectorAll(".reservation-recap-price-amount")
+    ).filter(el => /-?\d[\d\s]*,\d{2}\s*€/.test((el.textContent || "").trim()));
+
+    dlog("right amount nodes =", nodes.length, nodes.map(n => n.textContent.trim()));
+    return nodes;
+  }
+
+  function getLeftTariffAmountNodes() {
+    const left = document.querySelector(".guidap-split-layout-left");
+    if (!left) return [];
+
+    const nodes = Array.from(
+      left.querySelectorAll(".price-field .quantity-item-amount")
+    ).filter(el => /-?\d[\d\s]*,\d{2}\s*€/.test((el.textContent || "").trim()));
+
+    dlog("left amount nodes =", nodes.length, nodes.map(n => n.textContent.trim()));
+    return nodes;
+  }
+
+  function applyReservationAmountsVisibility() {
+    dlog("----- applyReservationAmountsVisibility -----");
+
+    ensureStyle();
+    clearHiddenMarkers();
+
+    if (!isManagedBookingStep()) {
+      dlog("not managed step");
+      return;
+    }
+
+    if (!shouldHideReservationAmounts()) {
+      dlog("context says show");
+      return;
+    }
+
+    const rightNodes = getRightReservationAmountNodes();
+    const leftNodes = getLeftTariffAmountNodes();
+
+    [...rightNodes, ...leftNodes].forEach((node, i) => {
+      const target = getNodeToHide(node);
+      if (target) {
+        target.classList.add("ug-hide-reservation-amount");
+        dlog(`hide node[${i}]`, target, "text =", target.textContent.trim());
+      }
+    });
+  }
+
+  let scheduled = false;
+  function schedule() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      applyReservationAmountsVisibility();
+    });
+  }
+
+  applyReservationAmountsVisibility();
+
+  const obs = new MutationObserver(schedule);
+  obs.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true
+  });
+
+  setTimeout(applyReservationAmountsVisibility, 200);
+  setTimeout(applyReservationAmountsVisibility, 600);
+  setTimeout(applyReservationAmountsVisibility, 1200);
+})();
+
+
+(function(){
+  const norm = window.__ug_norm || function (s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[’']/g, "'")
+      .trim();
+  };
+
+  function isVisible(el){
+    if(!el) return false;
+    const cs = getComputedStyle(el);
+    if(cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return false;
+    const r = el.getBoundingClientRect?.();
+    return r && r.width > 2 && r.height > 2;
+  }
+
+  function isMobile(){
+    return window.innerWidth <= 768;
+  }
+
+  function isCartMobileStep(){
+    if (!isMobile()) return false;
+    const txt = norm(document.body?.innerText || "");
+    return (
+      txt.includes("finalisez votre commande") &&
+      txt.includes("votre panier") &&
+      txt.includes("valider le panier")
+    );
+  }
+
+  function findValidateButton(){
+    return Array.from(document.querySelectorAll("button"))
+      .find(b => norm(b.textContent) === "valider le panier" && isVisible(b)) || null;
+  }
+
+  function findBottomStickyWrap(btn){
+    if (!btn) return null;
+
+    return (
+      btn.closest(".cart-recap-bottom") ||
+      btn.closest(".step-cart-recap") ||
+      btn.closest(".gdp-scoped-ui") ||
+      btn.parentElement
+    );
+  }
+
+  function ensureNote(){
+    let n = document.getElementById("payChoiceNoteMobileCart");
+    if(!n){
+      n = document.createElement("div");
+      n.id = "payChoiceNoteMobileCart";
+      n.textContent = "(1) Paiement au choix : acompte de 50 € ou totalité.";
+      n.style.cssText = `
+        margin-top:8px;
+        margin-bottom:4px;
+        font-size:12.5px;
+        color:#4b5563;
+        opacity:.95;
+        line-height:1.25;
+        text-align:center;
+        padding:0 10px;
+      `;
+    }
+    return n;
+  }
+
+  function ensureExtraSpace(container){
+    if (!container) return;
+    container.style.paddingBottom = "14px";
+    container.style.height = "auto";
+    container.style.maxHeight = "none";
+    container.style.overflowY = "visible";
+  }
+
+  function cleanup(){
+    if (isCartMobileStep()) return;
+    document.getElementById("payChoiceNoteMobileCart")?.remove();
+  }
+
+  function mount(){
+    cleanup();
+    if(!isCartMobileStep()) return;
+
+    const btn = findValidateButton();
+    if(!btn) return;
+
+    const wrap = findBottomStickyWrap(btn);
+    if (wrap) ensureExtraSpace(wrap);
+
+    const note = ensureNote();
+
+    if (note.previousElementSibling !== btn) {
+      btn.insertAdjacentElement("afterend", note);
+    }
+  }
+
+  let scheduled = false;
+  function scheduleMount(){
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      mount();
+    });
+  }
+
+  const obs = new MutationObserver(scheduleMount);
+  obs.observe(document.documentElement, { childList:true, subtree:true, characterData:true });
+
+  window.addEventListener("resize", scheduleMount, { passive:true });
+
+  mount();
+  setTimeout(mount, 300);
+  setTimeout(mount, 900);
+  setTimeout(mount, 1500);
 })();
