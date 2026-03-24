@@ -107,15 +107,25 @@ function shouldHideFromTextForHint(text) {
   ].some(keyword => t.includes(keyword));
 }
 
+function getMobileStepGroupLabelForHint() {
+  const labels = Array.from(document.querySelectorAll(".g-group-field-label"))
+    .map(el => norm(el.textContent || ""))
+    .filter(Boolean);
+  return labels.join(" ");
+}
+
+
 function shouldHideTotalInParticipantsHint() {
   if (!isManagedBookingStepForHint()) return false;
 
   const recapText = getRecapTitleSubtitleText();
   const selectedPackage = getSelectedPackageNameForHint();
+  const mobileGroupLabel = getMobileStepGroupLabelForHint();
 
   return (
     shouldHideFromTextForHint(recapText) ||
-    shouldHideFromTextForHint(selectedPackage)
+    shouldHideFromTextForHint(selectedPackage) ||
+    shouldHideFromTextForHint(mobileGroupLabel)
   );
 }
 
