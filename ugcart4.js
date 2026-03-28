@@ -1652,7 +1652,7 @@ function ensureNote(){
     `;
 
     n.innerHTML = `
-      <div style="font-weight:700;">+ de 100 000 Joueurs</div>
+      <div style="font-weight:700;">+ 4000 sessions en 9 ans</div>
       <div style="margin-top:2px; font-weight:600; opacity:.9;">Animateur(s) qualifié(s)</div>
     `;
   }
