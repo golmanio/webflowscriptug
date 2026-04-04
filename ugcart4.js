@@ -910,10 +910,17 @@ function computeExtraPersons(participants, threshold) {
 
   if (!Number.isFinite(participants) || !Number.isFinite(threshold)) return 0;
 
-  // Ex: seuil 13
-  // 12 => 0
-  // 13 => 1
-  // 22 => 10
+  const txt = norm(
+    `${getSelectedPackageNameRaw()} ${getRecapSubtitleRaw()} ${getRecapTitleSubtitleText()}`
+  );
+
+  // Murder Party : extras seulement à partir du participant suivant le seuil
+  // ex seuil 24 => 24 => 0, 25 => 1, 26 => 2
+  if (txt.includes("murder party")) {
+    return Math.max(0, participants - threshold);
+  }
+
+  // Règle actuelle pour les autres activités
   return Math.max(0, participants - (threshold - 1));
 }
 function findExtraPersonRule() {
